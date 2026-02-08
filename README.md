@@ -1,0 +1,82 @@
+# DCT-Toolkit: Robust Statistical Operations
+
+[![Development Status](https://img.shields.io/badge/status-alpha-orange)](https://github.com/yourusername/dct-toolkit)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+
+**DCT-Toolkit** provides robust statistical primitives (smoothing, mean, variance) based on the Discrete Cosine Transform (DCT). It is designed to be a constructive, composable alternative to "black box" gap filling methods.
+
+## Key Features
+
+- **Robust Statistics**: Compute local Mean, Variance, and Count even with missing data (NaNs) using Normalized Convolution.
+- **Polar Support**: Native handling of 2D Polarimetric data (Azimuth x Range) with adaptive kernels and correct boundary conditions.
+- **Fast & Exact**: Leverages FFT-based DCT for $O(N \log N)$ performance with analytical transfer functions.
+- **Zero Dependencies**: Built on pure `numpy` and `scipy`.
+
+## Installation
+
+```bash
+git clone https://github.com/yourusername/dct-toolkit.git
+cd dct-toolkit
+pip install .
+```
+
+## Quick Start
+
+### 1. Robust Smoothing (1D/2D)
+
+```python
+import numpy as np
+import dct_toolkit as dct
+
+# Create data with gaps
+data = np.sin(np.linspace(0, 10, 100))
+data[40:60] = np.nan  # Add a gap
+
+# Smooth (automatically handles NaNs via normalized convolution)
+smoothed = dct.dct_mean(data, width=10.0)
+```
+
+### 2. Polar Smoothing (Radar/Lidar)
+
+```python
+# Load polar data (Azimuth x Range)
+# 360 azimuths, 1000 range gates
+data = load_radar_data(...) 
+
+# Smooth with correct physics
+# - Adaptive azimuth width (constant physical size)
+# - Periodic boundary for azimuth (0-360 wrap)
+smoothed = dct.dct_smooth(
+    data, 
+    width=5.0,              # 5 pixels at reference range
+    coordinates='polar',
+    az_boundary='periodic', # Correctly handles 0/360 discontinuity
+    az_res_deg=1.0
+)
+```
+
+## Documentation
+
+- [Mathematical Basis](docs/MATHEMATICAL_BASIS.md): Theory of DCT smoothing and Normalized Convolution.
+- [API Reference](docs/API_REFERENCE.md): Detailed function documentation.
+- [Test Report](docs/TEST_REPORT.md): Validation results and performance benchmarks.
+- [Experimental Gap Filling](dct_toolkit/experimental/gap_filling/README.md): Iterative constructive gap filling.
+
+## Project Structure
+
+```
+dct_toolkit/
+├── dct_toolkit/           # Core package
+│   ├── core.py            # Transfer functions
+│   ├── cartesian.py       # Separable smoothing
+│   ├── polar.py           # Polar smoothing
+│   └── stats.py           # Statistical ops
+├── tests/                 # Unit tests
+├── examples/              # Usage scripts
+└── experimental/          # Beta features (Gap Filling)
+```
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.
