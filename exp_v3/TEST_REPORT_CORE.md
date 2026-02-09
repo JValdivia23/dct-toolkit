@@ -42,17 +42,9 @@ This was the most critical validation for the "Normalized Convolution" approach.
 - **Variance**: Recovered true variance (~1.0) from normal distribution with 33% gaps.
 - **Edge Cases**: Handled all-NaN arrays and single-point inputs gracefully without crashing.
 
-## Experimental Benchmark
+## Gap Filling Benchmarks
 
-**Objective**: Compare Constructive Gap Filling (Iterative DCT) vs Linear Interpolation.
+The v0.1.0 experimental benchmark (100x100 grid) has been superseded by the
+current comprehensive gap filling report:
 
-**Dataset**: Synthetic 2D field (Sine waves) on 100x100 grid with 30% random gaps.
-
-**Results:**
-```
-Linear Interp:     66.5 ms, MAE = 0.6200
-Iterative DCT:     4.0 ms, MAE = 0.0058
-Improvement:       +99.1%
-```
-
-**Conclusion**: The experimental gap filler is **16x faster** and **100x more accurate** for smooth fields than standard linear interpolation.
+- `exp_v3/TEST_REPORT_GAP_FILLING.md`

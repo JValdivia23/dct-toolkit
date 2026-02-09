@@ -13,9 +13,13 @@ We assume the true signal $y_{true}$ is smooth in some sense (band-limited or lo
 Unlike Tikhonov regularization (which requires inverting large matrices) or DCT-PLS (which requires solving a penalized least squares system), our approach is **constructive**.
 
 ### Step 1: Initialization
-We initialize the estimate $\hat{y}^{(0)}$ by filling gaps with a neutral value (e.g., 0 or global mean), or better, the result of a single pass of Normalized Convolution.
+We initialize the estimate $\hat{y}^{(0)}$ using one of three strategies (controlled by the `init` parameter):
 
-$$ \hat{y}^{(0)} = y_{obs} \quad (\text{with 0 at gaps}) $$
+- **`'linear'` (default)**: Axis-wise linear interpolation — first row-wise (`np.interp`), then column-wise for remaining NaNs, with a global-mean fallback.  This preserves spatial gradients across holes from the very first iterate and is equivalent to `scipy.interpolate.griddata` (linear) for most hole geometries.
+- **`'multiscale'`**: Coarse-to-fine DCT cascade — starts at `max(data_shape)/4` and halves down to the target width.
+- **`'dct'`**: Single-pass Normalized Convolution at the target width.
+
+$$ \hat{y}^{(0)} = \text{LinearInterp}(y_{obs}) \quad (\text{default}) $$
 
 ### Step 2: Iteration
 At each step $k$, we compute a "smooth trend" of the current estimate using Normalized Convolution. Importantly, we treat **all** points in the current estimate as valid sources of information, but we "reset" the known valid points to their ground truth after smoothing.

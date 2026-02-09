@@ -59,9 +59,10 @@ smoothed = dct.dct_smooth(
 ## Documentation
 
 - [Mathematical Basis](docs/MATHEMATICAL_BASIS.md): Theory of DCT smoothing and Normalized Convolution.
+- [Gap Filling Basis](docs/GAP_FILLING_BASIS.md): Mathematical basis for iterative gap filling.
 - [API Reference](docs/API_REFERENCE.md): Detailed function documentation.
-- [Test Report](docs/TEST_REPORT.md): Validation results and performance benchmarks.
-- [Experimental Gap Filling](dct_toolkit/experimental/gap_filling/README.md): Iterative constructive gap filling.
+- [Gap Filling Report](exp_v3/TEST_REPORT_GAP_FILLING.md): Experimental benchmark report.
+- [Gap Filling Guide](exp_v3/GAP_FILLING_GUIDE.md): Practical tuning notes and findings.
 
 ## Project Structure
 
@@ -71,10 +72,12 @@ dct_toolkit/
 │   ├── core.py            # Transfer functions
 │   ├── cartesian.py       # Separable smoothing
 │   ├── polar.py           # Polar smoothing
-│   └── stats.py           # Statistical ops
+│   ├── stats.py           # Statistical ops
+│   └── gap_filling.py     # Iterative gap filling
 ├── tests/                 # Unit tests
 ├── examples/              # Usage scripts
-└── experimental/          # Beta features (Gap Filling)
+├── exp_v3/                # Experiments (reports + code)
+└── docs/                  # Theory docs (API + math)
 ```
 
 ## License

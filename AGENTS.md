@@ -121,7 +121,7 @@ dct_toolkit/                    # PROJECT ROOT
 │   ├── cartesian.py          # 2D Cartesian separable smoothing
 │   ├── polar.py              # 2D Polar smoothing (adaptive kernels)
 │   ├── stats.py              # Statistical ops (Normalized Convolution)
-│   └── utils.py              # Validation & helpers
+│   └── gap_filling.py         # Iterative gap filling
 │
 ├── tests/                     # TEST SUITE ⚠️ TESTS GO HERE
 │   ├── test_core.py
@@ -134,19 +134,19 @@ dct_toolkit/                    # PROJECT ROOT
 │   ├── basic_polar.py
 │   └── comprehensive_demo.py
 │
-├── experimental/              # BETA CODE (not installed)
-│   └── gap_filling/
-│       ├── iterative_fill.py
-│       └── benchmark.py
+├── exp_v3/                    # EXPERIMENTS (reports + code)
+│   ├── figures/               # Generated figures (PNG/PDF)
+│   ├── test_width_impact.py
+│   ├── plot_gap_filling_results.py
+│   ├── GAP_FILLING_GUIDE.md
+│   ├── TEST_REPORT_GAP_FILLING.md
+│   ├── TEST_REPORT_CORE.md
+│   └── gap_filling_results.csv
 │
 ├── docs/                      # DOCUMENTATION
-│   ├── MATHEMATICAL_BASIS.md
 │   ├── API_REFERENCE.md
-│   ├── TEST_REPORT.md
-│   ├── PLAN.md
-│   └── experimental/
-│       ├── GAP_FILLING_MATH.md
-│       └── GAP_FILLING_TESTS.md
+│   ├── MATHEMATICAL_BASIS.md
+│   └── GAP_FILLING_BASIS.md
 │
 ├── README.md                  # Main documentation
 ├── CHANGELOG.md               # Version history
@@ -167,13 +167,13 @@ dct_toolkit/                    # PROJECT ROOT
 2. **Verify Baseline**
    ```bash
    export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
-   python -m pytest dct_toolkit/tests/ -v
+   python -m pytest tests/ -v
    ```
    All 19 tests must pass before you start.
 
 3. **Review Documentation**
-   - Check `docs/PLAN.md` for design decisions
    - Check `docs/MATHEMATICAL_BASIS.md` for theory
+   - Check `docs/GAP_FILLING_BASIS.md` for gap filling theory
    - Check `docs/API_REFERENCE.md` for existing API
 
 ### Making Changes
@@ -198,7 +198,7 @@ dct_toolkit/                    # PROJECT ROOT
 **Run Tests**:
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
-python -m pytest dct_toolkit/tests/ -v
+python -m pytest tests/ -v
 ```
 
 **Expected Output**: 19 tests passing
@@ -212,7 +212,7 @@ python -m pytest dct_toolkit/tests/ -v
 
 Before declaring task complete:
 
-- [ ] All 19 tests pass (`pytest dct_toolkit/tests/ -v`)
+- [ ] All 19 tests pass (`pytest tests/ -v`)
 - [ ] No imports from outside `dct_toolkit/`
 - [ ] All public functions have NumPy-style docstrings
 - [ ] All functions have type hints
@@ -240,7 +240,7 @@ Before declaring task complete:
   - dct_count, dct_mean, dct_variance, dct_std
 - [x] Test suite (19 tests, 100% pass)
 - [x] Documentation suite
-- [x] Experimental gap filling (100x accuracy improvement)
+- [x] Gap filling prototype (archived in git history)
 
 ### 🚧 In Progress / Next Phase (v0.2.0)
 - [ ] 3D support (volumetric data)
@@ -331,15 +331,16 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
 ## Emergency Contacts & References
 
 ### Documentation
-- **Design Decisions**: `docs/PLAN.md`
 - **Math Theory**: `docs/MATHEMATICAL_BASIS.md`
+- **Gap Filling Basis**: `docs/GAP_FILLING_BASIS.md`
 - **API Details**: `docs/API_REFERENCE.md`
-- **Test Results**: `docs/TEST_REPORT.md`
+- **Core Test Report**: `exp_v3/TEST_REPORT_CORE.md`
+- **Gap Filling Report**: `exp_v3/TEST_REPORT_GAP_FILLING.md`
 
 ### Code Examples
 - **Polar Smoothing**: `examples/basic_polar.py`
 - **Full Demo**: `examples/comprehensive_demo.py`
-- **Gap Filling**: `experimental/gap_filling/benchmark.py`
+- **Gap Filling**: `exp_v3/test_width_impact.py`
 
 ### Key Papers & References
 - Garcia (2010): DCT-PLS (contrast/background)
@@ -357,13 +358,13 @@ conda activate myenv
 export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
 
 # Test
-python -m pytest dct_toolkit/tests/ -v
+python -m pytest tests/ -v
 
 # Run example
 python dct_toolkit/examples/basic_polar.py
 
 # Benchmark
-python dct_toolkit/experimental/gap_filling/benchmark.py
+python exp_v3/test_width_impact.py
 
 # Check imports (should be empty)
 grep -r "^from \.\./" dct_toolkit/dct_toolkit/

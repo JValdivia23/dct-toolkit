@@ -6,6 +6,7 @@ based on the Discrete Cosine Transform (DCT). It supports:
 - 1D Data
 - 2D Cartesian Data
 - 2D Polarimetric Data (with adaptive kernels)
+- Iterative gap filling with linear interpolation initialization
 
 Key Functions
 -------------
@@ -14,6 +15,7 @@ Key Functions
 - dct_mean: Robust local mean (Normalized Convolution)
 - dct_variance: Robust local variance
 - dct_std: Robust local standard deviation
+- iterative_gap_fill: Fill gaps using iterative DCT smoothing
 
 Modules
 -------
@@ -21,14 +23,16 @@ Modules
 - cartesian: Separable N-D smoothing
 - polar: Polar coordinate smoothing
 - stats: Statistical operations
+- gap_filling: Iterative gap filling
 """
 
 from .core import get_dct_transfer_function, dct_convolve_1d
 from .cartesian import smooth_cartesian
 from .polar import smooth_polar
 from .stats import dct_count, dct_mean, dct_variance, dct_std
+from .gap_filling import iterative_gap_fill
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 def dct_smooth(
     data, 
