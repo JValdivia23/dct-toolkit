@@ -1,203 +1,106 @@
-# Gap Filling Experiment Report: Polar Coordinate Analysis
+# Gap Filling Experiment Report: Periodic Azimuth Boundary
 
-**Date:** 2026-02-09  
-**Version:** v0.3.1  
-**Grid:** 720 x 1000 (azimuth x range)  
+**Date:** 2026-02-09
+**Version:** v0.2.2 (Revised)
+**Grid:** 720 x 1000 (azimuth x range)
 **Experiment:** Linear initialization + iterative DCT diffusion vs. griddata baseline
+**Configuration:** Polar coordinates with **periodic azimuth boundary** (0° $\leftrightarrow$ 360°)
 
 ---
 
 ## Executive Summary
 
-This experiment evaluates the performance of the DCT-based gap filling algorithm with linear interpolation initialization against a scipy griddata baseline. All spatial visualizations are now presented in **polar coordinates** showing the full 360° azimuthal view (0-720 indices mapped to 0-360°) with range as radial distance (0-1000).
+This experiment evaluates the performance of the DCT-based gap filling algorithm on a polar grid with a large circular hole (radius=100 pixels in index space). Crucially, this version applies **periodic boundary conditions** in azimuth.
 
-### Key Findings
+### Key Findings (Revised)
 
-| Metric | Griddata | DCT (w=50, iter=10) | Improvement |
-|--------|----------|---------------------|-------------|
-| **MAE** | 0.0992 | 0.0615 | **38% better** |
-| **Time** | 33.1s | 0.3s | **110x faster** |
+| Metric | Griddata (Linear) | DCT (w=50, iter=20, init='linear') | DCT (w=50, iter=100, init='dct') |
+|--------|-------------------|------------------------------------|----------------------------------|
+| **MAE** | **1.236** | 3.057 | 2.338 |
+| **Time** | 7.70s | 1.04s | **0.70s** |
 
----
-
-## 1. Visualization Results
-
-### 1.1 Spatial Comparison (Polar View)
-
-**Figure:** `gap_filling_spatial_comparison.png/pdf`
-
-The polar coordinate visualization reveals the full 360° structure of the gap filling:
-
-- **Ground Truth:** Shows six Gaussian blobs distributed across the polar grid
-- **Gapped Data:** A circular hole is visible at range ≈200 (center location)
-- **DCT Fill (w=50, iter=10):** Smooth reconstruction with natural interpolation across the hole
-- **Griddata:** Piecewise linear reconstruction showing triangulation artifacts
-
-**Visual Insights:**
-- The polar view clearly shows the azimuthal symmetry of the test pattern
-- The circular hole appears as a disk-shaped gap in the field
-- DCT smoothing preserves the radial gradient structure better than griddata
-- Full 360° view reveals no azimuthal bias in the reconstruction
-
-### 1.2 Width Impact Analysis
-
-**Figure:** `gap_filling_width_impact.png/pdf`
-
-MAE vs smoothing width for different iteration counts:
-
-- **Small widths (3-5):** Minimal improvement over linear initialization alone
-- **Optimal range (20-50):** Best accuracy, width ≈ 25% of hole diameter (100px)
-- **Large widths (75-100):** Diminishing returns, slight over-smoothing
-
-**Key Observation:**
-For a 100-pixel radius hole, the optimal smoothing width is 50 pixels (50% of diameter), consistent with the theoretical expectation that width should be a significant fraction of the gap size.
-
-### 1.3 Iteration Convergence
-
-**Figure:** `gap_filling_iteration_convergence.png/pdf`
-
-Convergence behavior for widths 5, 20, and 50:
-
-- **Width=5:** Minimal improvement after linear init (already near-optimal for small gaps)
-- **Width=20:** Moderate improvement with iterations, converges by iteration 10
-- **Width=50:** Significant improvement, converges by iteration 10-20
-
-**Convergence Pattern:**
-All widths show monotonic error reduction. The 50-pixel width shows the steepest initial drop (iterations 0-5) as the DCT diffusion fills the large hole. By iteration 10, all widths have essentially converged.
-
-### 1.4 Uncertainty Maps (Polar View)
-
-**Figure:** `gap_filling_uncertainty_maps.png/pdf`
-
-Two uncertainty metrics visualized in polar coordinates:
-
-**dct_std (width=5):**
-- Shows local variability of the filled field
-- Higher uncertainty in gap region (centered at range=200)
-- Uncertainty propagates radially from gap boundaries
-- Polar view reveals azimuthally symmetric uncertainty distribution
-
-**Mapping Error:**
-- Quantifies data density loss due to smoothing
-- Maximum error (1.0) inside the hole where no data exists
-- Error decreases with distance from gap
-- Sharp boundary at gap edge visible in polar coordinates
+**Conclusion:**
+- **Accuracy:** `griddata` (Delaunay triangulation) is significantly more accurate (MAE 1.24 vs 2.34) for this specific smooth field with a large hole. It effectively captures the planar/linear trends across the hole using exact boundary values.
+- **Speed:** The iterative DCT method is **~10x faster** (0.7s vs 7.7s) and scales better with grid size (O(N log N) vs O(N^2) or worse for triangulation).
+- **Initialization:** Using `init='dct'` (Normalized Convolution) improves DCT performance significantly over `init='linear'` (MAE 2.34 vs 3.06).
 
 ---
 
-## 2. Performance Analysis
+## 1. Experimental Results
 
-### 2.1 Accuracy
+### 1.1 Performance Baseline
+- **Griddata (Linear + Nearest):** MAE = 1.24. This method triangulates valid points. It performs exceptionally well here because the underlying field (sine/cosine waves) is locally well-approximated by planes across the 20km hole.
+- **Linear Initialization Only:** MAE = 4.13. Simple axis-wise interpolation fails to capture the 2D structure of the hole (especially with the wrapping boundary).
 
-**Mean Absolute Error (MAE) in Gap Region:**
-- **Griddata:** 0.0992 (baseline)
-- **DCT (w=50, iter=10):** 0.0615
+### 1.2 Impact of Smoothing Width (`w`)
+- **Small Widths (3-20):** Ineffective for this large hole (radius=100). Diffusion is too slow.
+- **Large Widths (50):** Necessary to bridge the gap. `w=50` (half radius) converges reasonably well.
 
-**Analysis:**
-The DCT method achieves 38% lower MAE than griddata. This improvement comes from:
-1. Linear initialization provides excellent starting point (equivalent to griddata)
-2. Iterative DCT diffusion smooths the reconstruction while preserving valid data
-3. The spectral approach captures global field structure better than local triangulation
-
-### 2.2 Computational Speed
-
-**Execution Time:**
-- **Griddata:** 33.1 seconds
-- **DCT fill:** 0.3 seconds
-
-**Speedup:** 110x faster
-
-**Why DCT is faster:**
-- FFT-based computation: O(N log N) complexity
-- Griddata uses Delaunay triangulation: O(N²) to O(N³) depending on implementation
-- For dense grids (720x1000 = 720,000 points), FFT dominates
-
-### 2.3 Memory Efficiency
-
-Both methods process the full grid in memory, but:
-- DCT: Uses in-place FFT operations, minimal overhead
-- Griddata: Creates triangulation mesh, higher memory footprint
+### 1.3 Impact of Initialization
+- **Linear Init:** MAE 3.06. Leaving artifacts that diffusion struggles to remove.
+- **DCT Init:** MAE 2.34. Starts with a smooth normalized convolution result, leading to a better final state.
 
 ---
 
-## 3. Polar Coordinate Insights
+## 2. Analysis: What is the best way to fill data?
 
-### 3.1 Advantages of Polar Visualization
+Based on the sweep results, the **optimal strategy** depends on the priority:
 
-The conversion to polar coordinates (azimuth as angle, range as radius) provides:
+### If Accuracy is Paramount:
+**Use `scipy.interpolate.griddata` (method='linear').**
+- **Pros:** Lowest error (MAE 1.24). Respects boundary values exactly.
+- **Cons:** Slow (7.7s). Memory intensive for very large point clouds.
 
-1. **Physical Interpretation:** Matches radar/lidar coordinate systems
-2. **Full Domain View:** No cropping or zooming needed; entire 360° visible
-3. **Radial Structure:** Clearly shows how features vary with range
-4. **Azimuthal Symmetry:** Easy to identify angular patterns or biases
+### If Speed is Paramount:
+**Use `iterative_gap_fill(init='dct', width=large, iter=20)`.**
+- **Pros:** Fast (0.7s). Produces visually smooth results.
+- **Cons:** Higher error (MAE 2.34). Smoothed edges can introduce curvature errors compared to linear interpolation.
 
-### 3.2 Visualization Quality
-
-**Resolution:**
-- 720 azimuth bins × 1000 range bins = 720,000 data points
-- Polar mesh preserves all data without interpolation artifacts
-- Color mapping (RdBu_r for data, viridis for std, Reds for error) provides clear contrast
-
-**Figure Sizes:**
-- PNG: 1-2 MB (compressed raster)
-- PDF: 26-93 MB (vector graphics of full mesh)
-
-The large PDF sizes reflect the high resolution of the polar mesh visualization.
+**Winner for this specific test:** `griddata` for accuracy, `DCT` for speed.
 
 ---
 
-## 4. Recommendations
+## 3. Experiment 2: Non-Wrapping Hole (Centered)
 
-### 4.1 For Gap Filling Applications
+To investigate if the poor performance of `linear` initialization was due to the periodic boundary (wrapping hole), we ran a second experiment moving the hole to the center of the grid (Azimuth 180°).
 
-**Use DCT with Linear Init when:**
-- ✓ Large contiguous gaps (hole diameter > 20 pixels)
-- ✓ Smooth or band-limited underlying field
-- ✓ Real-time processing required (need speed)
-- ✓ Polar coordinate data (radar, lidar, sonar)
+| Metric | Griddata | Linear Init Only | DCT (w=50, iter=20) |
+|--------|----------|------------------|---------------------|
+| **MAE** | 1.134 | **1.117** | 1.580 |
+| **Time** | 7.73s | **0.01s** | 0.92s |
 
-**Optimal Parameters:**
-- **Width:** 25-50% of gap diameter
-- **Iterations:** 10-20 (diminishing returns after 20)
-- **Initialization:** Linear (default) works best for most cases
+**Findings:**
+1.  **Linear Init is Superior:** When away from the boundary, the simple axis-wise linear interpolation (MAE 1.12) slightly outperforms `griddata` (MAE 1.13) and is instant (0.01s).
+2.  **Diffusion Increases Error:** Applying DCT smoothing actually increased the error (1.12 $\to$ 1.58). The initial linear guess was already near-optimal for this smooth field; further smoothing flattened the curvature, deviating from the ground truth.
+3.  **Root Cause Confirmed:** The failure in Experiment 1 (MAE 4.13) was entirely due to `_linear_init_2d` failing to interpolate correctly across the periodic boundary (Azimuth 0°/360°).
 
-### 4.2 Limitations Observed
+---
 
-1. **Sharp Edges:** DCT smoothing will blur sharp discontinuities
-2. **Width Selection:** Must match gap scale; too small = no improvement, too large = over-smoothing
-3. **All-NaN Regions:** Requires at least some valid data in each row/column for linear init
+## 4. Room for Improvement
 
-### 4.3 Comparison to Alternatives
+The DCT method lags in accuracy. Areas for optimization:
 
-| Method | Speed | Accuracy | Best For |
-|--------|-------|----------|----------|
-| Griddata | Slow | Good | Irregular gaps, exact linear interpolation needed |
-| DCT (linear init) | **Fast** | **Better** | Large holes, smooth fields, polar data |
-| Astropy Gaussian | Medium | Poor | Small gaps, noise reduction |
+### 4.1 Fix Linear Initialization Boundary Handling
+Experiment 2 proves `init='linear'` is excellent (MAE 1.12 vs Griddata 1.13) when it works.
+-   **Action:** Update `_linear_init_2d` to detect periodic axes and interpolate across the wrap-around. This would make the DCT toolkit **faster AND more accurate** than `griddata` for this class of problems.
+
+### 4.2 Better Initialization (`init='dct'`)
+We observed `init='dct'` is superior to `init='linear'` (MAE 2.34 vs 3.06) *in the wrapping case*, but `linear` wins in the non-wrapping case.
+
+### 4.3 Curvature Preservation
+DCT diffusion (Gaussian smoothing) tends to flatten curvature.
+-   **Problem:** The Gaussian kernel averages valid data *near* the boundary.
+-   **Proposal:** Investigate "Harmonic Filling" (solving $\nabla^2 u = 0$ directly).
 
 ---
 
 ## 5. Conclusion
 
-The polar coordinate visualization confirms that the DCT-based gap filling algorithm with linear initialization:
+For large holes in smooth fields:
+1.  **Griddata** is the consistent baseline (MAE ~1.1-1.2).
+2.  **Linear Init** is the **best performer** (MAE 1.12, Time 0.01s) *if* the hole does not wrap around the boundary.
+3.  **DCT Smoothing** is useful for noise reduction but can degrade a perfect linear fill.
 
-1. **Achieves 38% better accuracy** than scipy griddata baseline
-2. **Runs 110x faster**, enabling real-time applications
-3. **Preserves radial structure** naturally in polar coordinates
-4. **Converges quickly** (10-20 iterations) for large holes
-
-The full 360° polar view reveals the azimuthal uniformity of the reconstruction and confirms no directional bias in the DCT smoothing. For polarimetric radar/lidar applications, this method provides both superior accuracy and computational efficiency.
-
----
-
-## Generated Artifacts
-
-- **Figures:** `exp_v3/figures/`
-  - `gap_filling_spatial_comparison.{png,pdf}` - 4-panel polar comparison
-  - `gap_filling_width_impact.{png,pdf}` - Width sweep analysis
-  - `gap_filling_iteration_convergence.{png,pdf}` - Convergence curves
-  - `gap_filling_uncertainty_maps.{png,pdf}` - Polar uncertainty visualization
-
----
-
-*Report generated automatically from experimental results.*
+**Recommendation for v0.4.0:**
+-   **Priority 1:** Fix `_linear_init_2d` to handle periodic boundaries. This solves the main accuracy deficit.
+-   **Priority 2:** Add `init='dct'` as a robust fallback for complex gap geometries where axis-wise linear interpolation fails.

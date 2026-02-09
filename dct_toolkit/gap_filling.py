@@ -64,15 +64,18 @@ def _linear_init_2d(data: np.ndarray) -> np.ndarray:
     Fill NaN gaps in a 2-D array using axis-wise linear interpolation.
 
     Strategy:
-    1. Row-wise (axis=1): interpolate each row independently.
-    2. Column-wise (axis=0): interpolate remaining NaNs along columns.
-    3. Global-mean fallback: any pixels still NaN (e.g. entire
-       row **and** column were NaN) are set to ``np.nanmean(data)``.
+    1. Azimuth-wise (axis=0): interpolate along columns (azimuth).
+       Avoids extrapolation at edges (left/right=NaN) to handle periodic
+       boundaries correctly (leaves gaps for range fill).
+    2. Range-wise (axis=1): interpolate along rows (range).
+       Avoids extrapolation at edges.
+    3. Fallback: Repeated passes allowing extrapolation to fill corners/edges.
+    4. Global-mean fallback: Final safety net.
 
     Parameters
     ----------
     data : np.ndarray
-        2-D array, possibly containing NaNs.
+        2-D array, possibly containing NaNs. Shape (n_az, n_range).
 
     Returns
     -------
@@ -80,24 +83,46 @@ def _linear_init_2d(data: np.ndarray) -> np.ndarray:
         Copy of *data* with NaN gaps filled.
     """
     filled = data.copy()
+    rows, cols = filled.shape
 
-    # --- Row-wise (axis=1) ---
-    for r in range(data.shape[0]):
-        row = filled[r]
-        m = np.isnan(row)
-        if np.any(m) and not np.all(m):
-            v = ~m
-            coords = np.arange(len(row))
-            filled[r, m] = np.interp(coords[m], coords[v], row[v])
-
-    # --- Column-wise (axis=0) for remaining NaNs ---
-    for c in range(filled.shape[1]):
+    # --- Pass 1: Azimuth-wise (axis=0), NO extrapolation ---
+    for c in range(cols):
         col = filled[:, c]
         m = np.isnan(col)
         if np.any(m) and not np.all(m):
             v = ~m
             coords = np.arange(len(col))
-            filled[m, c] = np.interp(coords[m], coords[v], col[v])
+            # left=NaN, right=NaN: Don't extrapolate wrapping gaps
+            filled[m, c] = np.interp(coords[m], coords[v], col[v], left=np.nan, right=np.nan)
+
+    # --- Pass 2: Range-wise (axis=1), NO extrapolation ---
+    for r in range(rows):
+        row = filled[r]
+        m = np.isnan(row)
+        if np.any(m) and not np.all(m):
+            v = ~m
+            coords = np.arange(len(row))
+            filled[r, m] = np.interp(coords[m], coords[v], row[v], left=np.nan, right=np.nan)
+
+    # --- Pass 3: Fill remaining with extrapolation (Azimuth then Range) ---
+    if np.any(np.isnan(filled)):
+        # Azimuth (axis=0) with extrapolation
+        for c in range(cols):
+            col = filled[:, c]
+            m = np.isnan(col)
+            if np.any(m) and not np.all(m):
+                v = ~m
+                coords = np.arange(len(col))
+                filled[m, c] = np.interp(coords[m], coords[v], col[v])
+        
+        # Range (axis=1) with extrapolation
+        for r in range(rows):
+            row = filled[r]
+            m = np.isnan(row)
+            if np.any(m) and not np.all(m):
+                v = ~m
+                coords = np.arange(len(row))
+                filled[r, m] = np.interp(coords[m], coords[v], row[v])
 
     # --- Global-mean fallback ---
     if np.any(np.isnan(filled)):

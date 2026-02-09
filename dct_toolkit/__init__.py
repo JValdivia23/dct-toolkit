@@ -32,7 +32,7 @@ from .polar import smooth_polar
 from .stats import dct_count, dct_mean, dct_variance, dct_std
 from .gap_filling import iterative_gap_fill
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 def dct_smooth(
     data, 

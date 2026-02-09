@@ -17,7 +17,6 @@ import sys
 import time
 
 import numpy as np
-from scipy.interpolate import griddata
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -28,126 +27,26 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'dct_toolkit'))
 
 from dct_toolkit import dct_mean, dct_std, iterative_gap_fill
 
+# Import scenario functions from test_width_impact
+sys.path.insert(0, os.path.dirname(__file__))
+try:
+    from test_width_impact import (
+        make_cartesian_ground_truth,
+        make_circular_hole,
+        fill_griddata,
+        compute_metrics
+    )
+except ImportError:
+    # Fallback if running from root without package install
+    from exp_v3.test_width_impact import (
+        make_cartesian_ground_truth,
+        make_circular_hole,
+        fill_griddata,
+        compute_metrics
+    )
+
 EXP_ROOT = os.path.abspath(os.path.dirname(__file__))
 FIG_DIR = os.path.join(EXP_ROOT, 'figures')
-
-
-# ---------------------------------------------------------------------------
-# Scenario construction (same as test_width_impact.py)
-# ---------------------------------------------------------------------------
-
-def make_smooth_blobs(
-    shape: tuple, seed: int = 42,
-) -> np.ndarray:
-    """
-    Generate a smooth field of Gaussian blobs in polar coordinates.
-
-    Parameters
-    ----------
-    shape : tuple
-        Shape of the output array (n_azimuth, n_range).
-    seed : int, optional
-        Random seed for reproducibility.
-
-    Returns
-    -------
-    np.ndarray
-        Smooth field of shape `shape`.
-    """
-    n_az, n_range = shape
-    rng = np.random.RandomState(seed)
-    az = np.arange(n_az)
-    rg = np.arange(n_range)
-    # Map azimuth to radians (0 to 2π)
-    theta = az * (2 * np.pi / n_az)
-    # Create meshgrid in polar coordinates
-    THETA, R = np.meshgrid(theta, rg, indexing='ij')
-    # Convert to Cartesian coordinates
-    X = R * np.cos(THETA)
-    Y = R * np.sin(THETA)
-
-    field = np.zeros(shape)
-    for _ in range(6):
-        c_x = rng.uniform(-n_range, n_range)
-        c_y = rng.uniform(-n_range, n_range)
-        sigma = rng.uniform(80, 200)
-        amp = rng.uniform(0.3, 1.0)
-        field += amp * np.exp(
-            -((X - c_x) ** 2 + (Y - c_y) ** 2) / (2 * sigma ** 2)
-        )
-    return field
-
-
-def make_circular_hole(
-    shape: tuple,
-    center: tuple = (200, 0),
-    radius: float = 100.0,
-) -> np.ndarray:
-    """
-    Create a boolean mask with a circular hole in polar coordinates, using X/Y distance.
-
-    Parameters
-    ----------
-    shape : tuple
-        Shape of the output array (n_azimuth, n_range).
-    center : tuple, optional
-        Center of the hole in (range, azimuth) index coordinates.
-    radius : float, optional
-        Radius of the hole in pixels.
-
-    Returns
-    -------
-    np.ndarray
-        Boolean mask: True = valid (outside hole), False = inside hole.
-    """
-    n_az, n_range = shape
-    az = np.arange(n_az)
-    rg = np.arange(n_range)
-    # Map azimuth to radians (0 to 2π)
-    theta = az * (2 * np.pi / n_az)
-    # Create meshgrid in polar coordinates
-    THETA, R = np.meshgrid(theta, rg, indexing='ij')
-    # Convert to Cartesian coordinates
-    X = R * np.cos(THETA)
-    Y = R * np.sin(THETA)
-    # Center in X/Y
-    center_r, center_az = center
-    center_theta = center_az * (2 * np.pi / n_az)
-    center_x = center_r * np.cos(center_theta)
-    center_y = center_r * np.sin(center_theta)
-    dist = np.sqrt((X - center_x) ** 2 + (Y - center_y) ** 2)
-    return dist > radius
-
-
-def fill_griddata_fn(
-    truth: np.ndarray, mask: np.ndarray,
-) -> np.ndarray:
-    n_az, n_range = truth.shape
-    az = np.arange(n_az)
-    rg = np.arange(n_range)
-    AZ, RG = np.meshgrid(az, rg, indexing='ij')
-
-    points = np.column_stack([AZ[mask], RG[mask]])
-    values = truth[mask]
-    xi = np.column_stack([AZ.ravel(), RG.ravel()])
-
-    filled = griddata(points, values, xi, method='linear')
-    filled = filled.reshape(truth.shape)
-    nan_mask = np.isnan(filled)
-    if np.any(nan_mask):
-        filled_nearest = griddata(points, values, xi, method='nearest')
-        filled_nearest = filled_nearest.reshape(truth.shape)
-        filled[nan_mask] = filled_nearest[nan_mask]
-    return filled
-
-
-def save_fig(fig: plt.Figure, name: str) -> None:
-    """Save figure as PNG and PDF."""
-    path_png = os.path.join(FIG_DIR, f'{name}.png')
-    path_pdf = os.path.join(FIG_DIR, f'{name}.pdf')
-    fig.savefig(path_png, dpi=150, bbox_inches='tight')
-    fig.savefig(path_pdf, bbox_inches='tight')
-    print(f"  Saved: {name}.png, {name}.pdf")
 
 
 # ---------------------------------------------------------------------------
@@ -171,23 +70,13 @@ def create_polar_mesh(shape: tuple) -> tuple:
     return THETA, R
 
 
-def mark_hole_polar(ax, center_az: float = 0, center_r: float = 200, radius: float = 100) -> None:
-    """Mark circular hole boundary on polar plot."""
-    # Convert center from indices to polar coordinates
-    # center_az is already in azimuth indices (0-720), convert to radians
-    theta_center = center_az * (2 * np.pi / 720)
-    
-    # Create circle in polar coordinates
-    theta_circle = np.linspace(0, 2 * np.pi, 100)
-    # Circle in Cartesian around center
-    x_circle = center_r + radius * np.cos(theta_circle)
-    y_circle = center_az + radius * np.sin(theta_circle)
-    
-    # Convert back to polar (this is approximate for visualization)
-    r_circle = np.sqrt(x_circle**2 + y_circle**2)
-    theta_circle_plot = np.arctan2(y_circle, x_circle)
-    
-    ax.plot(theta_circle_plot, r_circle, 'k--', linewidth=1.5)
+def save_fig(fig: plt.Figure, name: str) -> None:
+    """Save figure as PNG and PDF."""
+    path_png = os.path.join(FIG_DIR, f'{name}.png')
+    path_pdf = os.path.join(FIG_DIR, f'{name}.pdf')
+    fig.savefig(path_png, dpi=150, bbox_inches='tight')
+    fig.savefig(path_pdf, bbox_inches='tight')
+    print(f"  Saved: {name}.png, {name}.pdf")
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +147,8 @@ def plot_width_impact(
         maes = []
         for w in widths:
             filled = iterative_gap_fill(
-                gapped, float(w), init='linear', max_iter=n_iter,
+                gapped, float(w), coordinates='polar', az_boundary='periodic',
+                az_res_deg=0.5, init='linear', max_iter=n_iter,
             )
             mae = np.mean(np.abs(filled[gap_mask] - truth[gap_mask]))
             maes.append(mae)
@@ -271,7 +161,8 @@ def plot_width_impact(
 
     # Linear init only (0 iter)
     filled_li = iterative_gap_fill(
-        gapped, 5.0, init='linear', max_iter=0,
+        gapped, 5.0, coordinates='polar', az_boundary='periodic',
+        az_res_deg=0.5, init='linear', max_iter=0,
     )
     mae_li = np.mean(np.abs(filled_li[gap_mask] - truth[gap_mask]))
     ax.axhline(
@@ -316,7 +207,8 @@ def plot_iteration_convergence(
         maes = []
         for n_iter in iters:
             filled = iterative_gap_fill(
-                gapped, float(w), init='linear', max_iter=n_iter,
+                gapped, float(w), coordinates='polar', az_boundary='periodic',
+                az_res_deg=0.5, init='linear', max_iter=n_iter,
             )
             mae = np.mean(np.abs(filled[gap_mask] - truth[gap_mask]))
             maes.append(mae)
@@ -356,14 +248,14 @@ def plot_uncertainty_maps(
 
     # dct_std of filled field
     std_field = dct_std(
-        filled_dct, ref_width,
+        filled_dct, ref_width, coordinates='polar', az_res_deg=0.5,
         mask=np.ones_like(filled_dct, dtype=bool),
     )
 
     # Mapping error = 1 - dct_mean(indicator, width)
     indicator = (~gap_mask).astype(float)
     density = dct_mean(
-        indicator, ref_width,
+        indicator, ref_width, coordinates='polar', az_res_deg=0.5,
         mask=np.ones_like(indicator, dtype=bool),
     )
     mapping_error = np.clip(1.0 - density, 0.0, 1.0)
@@ -372,7 +264,7 @@ def plot_uncertainty_maps(
 
     # dct_std
     ax0 = fig.add_subplot(1, 2, 1, projection='polar')
-    im0 = ax0.pcolormesh(THETA, R, std_field, shading='auto', cmap='viridis')
+    im0 = ax0.pcolormesh(THETA, R, std_field, shading='auto', cmap='viridis', rasterized=True)
     ax0.set_title(f'dct_std (width={ref_width})', fontsize=12, pad=20)
     ax0.set_ylim(0, n_range)
     ax0.set_theta_zero_location('N')
@@ -383,7 +275,7 @@ def plot_uncertainty_maps(
 
     # Mapping error
     ax1 = fig.add_subplot(1, 2, 2, projection='polar')
-    im1 = ax1.pcolormesh(THETA, R, mapping_error, shading='auto', cmap='Reds', vmin=0, vmax=1)
+    im1 = ax1.pcolormesh(THETA, R, mapping_error, shading='auto', cmap='Reds', vmin=0, vmax=1, rasterized=True)
     ax1.set_title(f'Mapping Error (width={ref_width})', fontsize=12, pad=20)
     ax1.set_ylim(0, n_range)
     ax1.set_theta_zero_location('N')
@@ -413,8 +305,8 @@ def main() -> None:
     print("=" * 60)
 
     shape = (720, 1000)
-    truth = make_smooth_blobs(shape)
-    mask = make_circular_hole(shape, center=(200, 0), radius=100)
+    truth = make_cartesian_ground_truth(shape, range_res_m=100.0, az_res_deg=0.5)
+    mask = make_circular_hole(shape, center=(200, 0), radius=100, range_res_m=100.0, az_res_deg=0.5)
     gap_mask = ~mask
     gapped = truth.copy()
     gapped[gap_mask] = np.nan
@@ -422,13 +314,14 @@ def main() -> None:
     # Compute fills
     print("Computing griddata fill ...")
     t0 = time.time()
-    filled_gd = fill_griddata_fn(truth, mask)
+    filled_gd = fill_griddata(truth, mask, range_res_m=100.0, az_res_deg=0.5)
     print(f"  Done in {time.time() - t0:.1f}s")
 
     print("Computing DCT fill (linear init, w=50, iter=10) ...")
     t0 = time.time()
     filled_dct = iterative_gap_fill(
-        gapped, 50.0, init='linear', max_iter=10,
+        gapped, 50.0, coordinates='polar', az_boundary='periodic',
+        az_res_deg=0.5, init='linear', max_iter=10,
     )
     print(f"  Done in {time.time() - t0:.1f}s")
 
