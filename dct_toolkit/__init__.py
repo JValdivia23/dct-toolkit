@@ -16,6 +16,7 @@ Key Functions
 - dct_variance: Robust local variance
 - dct_std: Robust local standard deviation
 - iterative_gap_fill: Fill gaps using iterative DCT smoothing
+- dct_inpaint: Fill gaps via DCT spectral inpainting (penalised least squares)
 
 Modules
 -------
@@ -23,26 +24,22 @@ Modules
 - cartesian: Separable N-D smoothing
 - polar: Polar coordinate smoothing
 - stats: Statistical operations
-- gap_filling: Iterative gap filling
+- gap_filling: Iterative gap filling and spectral inpainting
 """
 
 from .core import get_dct_transfer_function, dct_convolve_1d
 from .cartesian import smooth_cartesian
 from .polar import smooth_polar
 from .stats import dct_count, dct_mean, dct_variance, dct_std
-from .gap_filling import iterative_gap_fill
+from .gap_filling import iterative_gap_fill, dct_inpaint
 
-__version__ = "0.2.1"
+__version__ = "0.4.0"
 
-def dct_smooth(
-    data, 
-    width, 
-    coordinates='cartesian', 
-    **kwargs
-):
+
+def dct_smooth(data, width, coordinates="cartesian", **kwargs):
     """
     Apply DCT-based smoothing.
-    
+
     Parameters
     ----------
     data : np.ndarray
@@ -53,15 +50,15 @@ def dct_smooth(
         'cartesian' or 'polar'.
     **kwargs
         Additional arguments (kernel_type, az_res_deg, etc.)
-        
+
     Returns
     -------
     smoothed : np.ndarray
         Smoothed data.
     """
-    if coordinates == 'cartesian':
+    if coordinates == "cartesian":
         return smooth_cartesian(data, width, **kwargs)
-    elif coordinates == 'polar':
+    elif coordinates == "polar":
         # Polar func takes width_pixels
         return smooth_polar(data, width_pixels=width, **kwargs)
     else:

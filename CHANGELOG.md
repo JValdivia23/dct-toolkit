@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-02-28
+
+### Added
+- **DCT Spectral Inpainting (`dct_inpaint`)**:
+    - New gap-filling method based on DCT-domain Penalised Least Squares (Garcia, 2010).
+    - Minimises ‖W·(y − û)‖² + λ·‖Δᵖ û‖² with automatic width-to-lambda mapping.
+    - Default order p=2 (bi-harmonic) preserves curvature across gaps — equivalent to
+      thin-plate spline interpolation.
+    - Supports both Cartesian (DCT-II reflective BC) and Polar (RFFT periodic azimuth +
+      DCT reflective range) coordinates.
+    - Initialises with fast linear interpolation baseline, then refines iteratively.
+    - 2.9x more accurate than `iterative_gap_fill` and 34% more accurate than
+      `scipy.interpolate.griddata` on the standard polar benchmark (wrapping hole).
+- **Helper functions**:
+    - `_width_to_lambda`: Derive Tikhonov lambda from smoothing width.
+    - `_eigenvalues_dct` / `_eigenvalues_dft`: Compute Laplacian eigenvalues for
+      reflective / periodic boundary conditions.
+    - `_compute_eigenvalues_2d`: Build 2-D eigenvalue tensor.
+    - `_forward_transform` / `_inverse_transform`: Unified spectral transforms
+      supporting mixed BC (periodic azimuth + reflective range).
+- **Test suite** (`tests/test_gap_filling.py`):
+    - 28 tests covering helpers, 1D/2D Cartesian, polar (periodic + reflective),
+      curvature preservation, edge cases, and v3 comparison.
+- **Benchmark** (`exp_v4/test_inpaint_vs_v3.py`):
+    - Reproduces exp_v3 polar benchmark with dct_inpaint added.
+- **Figures** (`exp_v4/figures/`):
+    - 5 publication-quality figures (PNG + PDF): spatial comparison (v3 vs v4 vs
+      griddata), error maps, width impact, convergence, and method bar chart.
+- **Documentation**:
+    - Updated `docs/GAP_FILLING_BASIS.md` with DCT-PLS theory, eigenvalue
+      diagonalisation, width-to-lambda bridge, and benchmark results.
+    - Updated `exp_v4/PLAN.md` with refined mathematical formulation.
+
+### Changed
+- `__init__.py`: Exports `dct_inpaint`; version bumped to `0.4.0`.
+- `gap_filling.py`: Module docstring updated to document both algorithms.
+
 ## [0.2.1] - 2026-02-09
 
 ### Fixed
