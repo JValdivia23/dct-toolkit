@@ -74,6 +74,60 @@ Compute robust local standard deviation ($\sqrt{\text{Var}}$).
 
 ### `dct_toolkit.gap_filling`
 
+#### `dct_inpaint(data, width, coordinates='cartesian', order=2, max_iter=100, tol=1e-5, init='linear', smooth_output=False, **kwargs)`
+Fill gaps via DCT-domain Penalised Least Squares (spectral inpainting).
+
+Minimises the functional **J(u) = ||W(y - u)||^2 + lambda ||D^p u||^2** where
+W = diag(mask), D^p is the p-th order difference operator, and lambda is derived
+automatically from `width`.  With the default `order=2` (bi-harmonic penalty),
+this is equivalent to thin-plate spline interpolation: it preserves curvature
+across gaps rather than flattening them.
+
+- **data** (np.ndarray): Input data with NaNs marking gaps. 1-D or 2-D.
+- **width** (float): Correlation length scale in grid points (must be > 0). Controls smoothness of the reconstruction: larger width = smoother fill across gaps. Internally mapped to Tikhonov parameter lambda via `lambda = (width^2 / 24)^order`.
+- **coordinates** (str): `'cartesian'` or `'polar'`. Default `'cartesian'`.
+- **order** (int): Order of the smoothness penalty (must be >= 1). Default `2`.
+  - `1` — gradient penalty (Laplace equation, membrane).
+  - `2` — curvature penalty (bi-harmonic, thin-plate spline). **Recommended.**
+  - `3` — third-order (very smooth).
+- **max_iter** (int): Maximum number of iterations. Default `100`.
+- **tol** (float): Convergence tolerance (relative L2 change of gap pixels). Default `1e-5`.
+- **init** (str): Initialisation strategy for gap values:
+  - `'linear'` (default): Axis-wise linear interpolation.
+  - `'zeros'`: Fill gaps with zero (useful for zero-mean fields).
+- **smooth_output** (bool): If True, the final result is the spectrally-smoothed field (valid + gap). If False, valid data is preserved exactly. Default `False`.
+- **\*\*kwargs**: Keyword arguments for polar mode:
+  - `az_res_deg` (float) — azimuth resolution in degrees. Enables range-adaptive azimuth penalty: at range index *j*, the effective azimuth penalty scales as `1 / (j * dtheta)^(2p)`, mirroring the adaptive kernel widths in `smooth_polar`.
+  - `az_boundary` (str) — `'reflective'` or `'periodic'`. Default `'reflective'`.
+
+**Returns**: `np.ndarray` — Data with gaps filled. Original valid values preserved exactly when `smooth_output=False`.
+
+**Raises**: `ValueError` — If `width <= 0`, `order < 1`, `coordinates` or `az_boundary` is invalid, or data is not 1-D/2-D.
+
+**Example** (1-D):
+```python
+import numpy as np
+from dct_toolkit import dct_inpaint
+
+x = np.linspace(0, 2 * np.pi, 200)
+data = np.sin(x)
+data[80:120] = np.nan
+filled = dct_inpaint(data, width=10.0)
+```
+
+**Example** (2-D polar with wrapping):
+```python
+filled = dct_inpaint(
+    radar_data,                  # (n_az, n_range) with NaN gaps
+    width=50.0,
+    coordinates='polar',
+    az_res_deg=1.0,              # adaptive azimuth penalty
+    az_boundary='periodic',      # correct 0/360 wrapping
+)
+```
+
+See [Gap Filling Basis](GAP_FILLING_BASIS.md) for the mathematical foundation.
+
 #### `iterative_gap_fill(data, width, coordinates='cartesian', max_iter=50, tol=1e-4, init='linear', multiscale=None, smooth_output=False, **kwargs)`
 Fill gaps (NaN values) using iterative DCT-based diffusion.
 

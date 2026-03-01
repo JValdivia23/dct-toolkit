@@ -443,9 +443,23 @@ def _compute_eigenvalues_2d(
     shape: Tuple[int, int],
     order: int,
     az_boundary: str = "reflective",
+    az_res_deg: Optional[float] = None,
 ) -> np.ndarray:
     """
     Build the 2-D eigenvalue tensor E_p[k0, k1].
+
+    For Cartesian coordinates (``az_res_deg=None``), the tensor is the
+    separable outer sum of 1-D eigenvalues — isotropic penalty.
+
+    For polar coordinates (``az_res_deg`` given), the azimuth eigenvalues
+    are scaled per range column to account for the physical cell size
+    variation: at range index *j* (1-based), the azimuth arc-length is
+    ``j * az_res_rad``, so the effective azimuth width is
+    ``width / (j * az_res_rad)``.  This mirrors the adaptive kernel
+    widths used by ``smooth_polar``.
+
+    The returned tensor already incorporates the range-dependent scaling
+    so that ``1 + lambda * E`` gives the correct spectral filter.
 
     Parameters
     ----------
@@ -457,6 +471,10 @@ def _compute_eigenvalues_2d(
         Boundary condition for axis-0 (azimuth in polar coordinates).
         ``'reflective'`` → DCT eigenvalues; ``'periodic'`` → DFT eigenvalues.
         Axis-1 (range) is always reflective.
+    az_res_deg : float or None
+        Azimuth resolution in degrees.  When provided, azimuth eigenvalues
+        are scaled per range gate to produce a polar-adaptive penalty.
+        ``None`` (default) gives the standard isotropic (Cartesian) tensor.
 
     Returns
     -------
@@ -476,8 +494,28 @@ def _compute_eigenvalues_2d(
     # Axis 1 eigenvalues (always reflective)
     E1 = _eigenvalues_dct(n1, order)  # (n1,)
 
-    # Outer sum → 2-D tensor
-    E = E0[:, np.newaxis] + E1[np.newaxis, :]
+    if az_res_deg is not None:
+        # Polar-adaptive: azimuth penalty scales with range
+        #
+        # At range index j (1-based), the effective azimuth width in
+        # azimuth-pixels is  w_az = width / (j * dtheta).  Since
+        # lambda = (width^2/24)^p, the azimuth lambda at range j is:
+        #   lam_az(j) = ((width/(j*dtheta))^2 / 24)^p
+        #             = lam * (1 / (j * dtheta))^(2p)
+        #
+        # We absorb this scaling into the eigenvalue tensor so the
+        # caller can still use  gamma_inv = 1 + lam * E :
+        #   E[k0, j] = scale(j) * E0[k0] + E1[j]
+        #   where scale(j) = 1 / (j * dtheta)^(2p)
+        az_res_rad = np.deg2rad(az_res_deg)
+        r_indices = np.arange(1, n1 + 1, dtype=np.float64)
+        scale = 1.0 / (r_indices * az_res_rad) ** (2 * order)
+        # shape: E0[:,newaxis] * scale[newaxis,:] → (n_freq, n1)
+        E = E0[:, np.newaxis] * scale[np.newaxis, :] + E1[np.newaxis, :]
+    else:
+        # Isotropic (Cartesian): standard outer sum
+        E = E0[:, np.newaxis] + E1[np.newaxis, :]
+
     return E
 
 
@@ -669,6 +707,26 @@ def dct_inpaint(
     if data.ndim not in (1, 2):
         raise ValueError(f"dct_inpaint supports 1-D and 2-D data, got {data.ndim}-D")
 
+    if width <= 0:
+        raise ValueError(f"width must be positive, got {width}")
+
+    if order < 1:
+        raise ValueError(f"order must be >= 1, got {order}")
+
+    _valid_coordinates = ("cartesian", "polar")
+    if coordinates not in _valid_coordinates:
+        raise ValueError(
+            f"Unknown coordinates '{coordinates}'. Choose from {_valid_coordinates}."
+        )
+
+    az_boundary_kwarg = kwargs.get("az_boundary", "reflective")
+    _valid_az_boundaries = ("reflective", "periodic")
+    if az_boundary_kwarg not in _valid_az_boundaries:
+        raise ValueError(
+            f"Unknown az_boundary '{az_boundary_kwarg}'. "
+            f"Choose from {_valid_az_boundaries}."
+        )
+
     valid_mask = ~np.isnan(data)
     if np.all(valid_mask):
         return data.copy()
@@ -686,7 +744,7 @@ def dct_inpaint(
     # ------------------------------------------------------------------
     # Determine boundary conditions
     # ------------------------------------------------------------------
-    az_boundary = kwargs.get("az_boundary", "reflective")
+    az_boundary = az_boundary_kwarg
     if coordinates == "cartesian":
         az_boundary = "reflective"  # Cartesian always reflective
 
@@ -698,7 +756,10 @@ def dct_inpaint(
     if data.ndim == 1:
         E = _eigenvalues_dct(data.shape[0], order)
     else:
-        E = _compute_eigenvalues_2d(data.shape, order, az_boundary)
+        # For polar coordinates, pass az_res_deg to enable adaptive
+        # azimuth eigenvalues (range-dependent penalty).
+        az_res_deg = kwargs.get("az_res_deg", None) if coordinates == "polar" else None
+        E = _compute_eigenvalues_2d(data.shape, order, az_boundary, az_res_deg)
 
     # Spectral filter denominator: Γ⁻¹ = 1 + λ·Eₚ
     gamma_inv = 1.0 + lam * E

@@ -15,32 +15,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       thin-plate spline interpolation.
     - Supports both Cartesian (DCT-II reflective BC) and Polar (RFFT periodic azimuth +
       DCT reflective range) coordinates.
+    - **Adaptive polar eigenvalues**: When `az_res_deg` is provided, azimuth penalty
+      scales with range (`1/(r·dθ)^(2p)`), mirroring `smooth_polar`'s adaptive kernels.
     - Initialises with fast linear interpolation baseline, then refines iteratively.
     - 2.9x more accurate than `iterative_gap_fill` and 34% more accurate than
       `scipy.interpolate.griddata` on the standard polar benchmark (wrapping hole).
+    - **Input validation**: Rejects `width <= 0`, `order < 1`, invalid `coordinates`
+      and `az_boundary` values with clear error messages.
 - **Helper functions**:
     - `_width_to_lambda`: Derive Tikhonov lambda from smoothing width.
     - `_eigenvalues_dct` / `_eigenvalues_dft`: Compute Laplacian eigenvalues for
       reflective / periodic boundary conditions.
-    - `_compute_eigenvalues_2d`: Build 2-D eigenvalue tensor.
+    - `_compute_eigenvalues_2d`: Build 2-D eigenvalue tensor (isotropic or
+      polar-adaptive with range-dependent azimuth scaling).
     - `_forward_transform` / `_inverse_transform`: Unified spectral transforms
       supporting mixed BC (periodic azimuth + reflective range).
 - **Test suite** (`tests/test_gap_filling.py`):
-    - 28 tests covering helpers, 1D/2D Cartesian, polar (periodic + reflective),
-      curvature preservation, edge cases, and v3 comparison.
+    - 42 tests covering helpers, transform round-trips, convergence, 1D/2D Cartesian,
+      polar (periodic + reflective + adaptive eigenvalues), curvature preservation,
+      input validation, edge cases, and v3 comparison.
 - **Benchmark** (`exp_v4/test_inpaint_vs_v3.py`):
     - Reproduces exp_v3 polar benchmark with dct_inpaint added.
+- **Noisy benchmark** (`exp_v4/test_noisy_inpaint.py`):
+    - Evaluates noise robustness across SNR levels 3–100.
 - **Figures** (`exp_v4/figures/`):
-    - 5 publication-quality figures (PNG + PDF): spatial comparison (v3 vs v4 vs
-      griddata), error maps, width impact, convergence, and method bar chart.
+    - 8 publication-quality figures (PNG + PDF): spatial comparison (v3 vs v4 vs
+      griddata), error maps, width impact, convergence, method bar chart,
+      noisy spatial comparison, SNR sweep, and noisy width impact.
 - **Documentation**:
+    - Updated `docs/API_REFERENCE.md` with full `dct_inpaint` entry.
     - Updated `docs/GAP_FILLING_BASIS.md` with DCT-PLS theory, eigenvalue
       diagonalisation, width-to-lambda bridge, and benchmark results.
+    - Updated `docs/MATHEMATICAL_BASIS.md` with cross-reference to inpainting theory.
+    - Updated `README.md` with gap filling features and usage examples.
     - Updated `exp_v4/PLAN.md` with refined mathematical formulation.
 
 ### Changed
 - `__init__.py`: Exports `dct_inpaint`; version bumped to `0.4.0`.
 - `gap_filling.py`: Module docstring updated to document both algorithms.
+  `_compute_eigenvalues_2d` now accepts optional `az_res_deg` for polar-adaptive
+  eigenvalues.
 
 ## [0.2.1] - 2026-02-09
 

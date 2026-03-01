@@ -21,6 +21,8 @@ from dct_toolkit.gap_filling import (
     _eigenvalues_dct,
     _eigenvalues_dft,
     _compute_eigenvalues_2d,
+    _forward_transform,
+    _inverse_transform,
 )
 
 
@@ -131,6 +133,122 @@ class TestHelpers:
         """2D eigenvalue tensor shape for periodic axis-0."""
         E = _compute_eigenvalues_2d((60, 80), 2, "periodic")
         assert E.shape == (60 // 2 + 1, 80)
+
+    def test_eigenvalues_2d_adaptive_shape(self):
+        """Adaptive polar eigenvalues should have the same shape."""
+        E_iso = _compute_eigenvalues_2d((60, 80), 2, "reflective")
+        E_adp = _compute_eigenvalues_2d((60, 80), 2, "reflective", az_res_deg=1.0)
+        assert E_adp.shape == E_iso.shape
+
+    def test_eigenvalues_2d_adaptive_dc_zero(self):
+        """DC component should still be zero with adaptive eigenvalues."""
+        E = _compute_eigenvalues_2d((60, 80), 2, "periodic", az_res_deg=1.0)
+        # DC is E[0, :] for azimuth k=0 — azimuth eigenvalue is 0
+        # but range eigenvalue E1[j] is not zero for j>0.
+        # Full DC is E[0,0] = 0 (both k_az=0, k_range=0).
+        assert E[0, 0] == 0.0
+
+    def test_eigenvalues_2d_adaptive_varies_with_range(self):
+        """Adaptive azimuth eigenvalues should be stronger at near range."""
+        E = _compute_eigenvalues_2d((60, 80), 2, "reflective", az_res_deg=1.0)
+        # For a fixed azimuth wavenumber (k=5), the eigenvalue should
+        # decrease with range (larger range → smaller azimuth penalty).
+        # E[k, j] = scale(j) * E0[k] + E1[j], scale decreases with j.
+        # Compare E[5, 0] - E1[0] vs E[5, 79] - E1[79]
+        E1 = (2.0 - 2.0 * np.cos(np.pi * np.arange(80) / 80.0)) ** 2
+        az_contrib_near = E[5, 0] - E1[0]
+        az_contrib_far = E[5, 79] - E1[79]
+        assert az_contrib_near > az_contrib_far, (
+            "Azimuth penalty should be stronger at near range"
+        )
+
+
+# ===================================================================
+# Transform round-trip tests
+# ===================================================================
+
+
+class TestTransformRoundTrip:
+    """Verify _forward_transform / _inverse_transform are exact inverses."""
+
+    def test_roundtrip_1d(self):
+        """1-D DCT round-trip should recover original data."""
+        rng = np.random.default_rng(42)
+        data = rng.standard_normal(64)
+        spectrum = _forward_transform(data)
+        recovered = _inverse_transform(spectrum, n_axis0=64)
+        np.testing.assert_allclose(recovered, data, atol=1e-12)
+
+    def test_roundtrip_2d_reflective(self):
+        """2-D reflective (DCT+DCT) round-trip should recover original data."""
+        rng = np.random.default_rng(42)
+        data = rng.standard_normal((40, 60))
+        spectrum = _forward_transform(data, az_boundary="reflective")
+        recovered = _inverse_transform(spectrum, n_axis0=40, az_boundary="reflective")
+        np.testing.assert_allclose(recovered, data, atol=1e-12)
+
+    def test_roundtrip_2d_periodic(self):
+        """2-D periodic (RFFT+DCT) round-trip should recover original data."""
+        rng = np.random.default_rng(42)
+        data = rng.standard_normal((40, 60))
+        spectrum = _forward_transform(data, az_boundary="periodic")
+        recovered = _inverse_transform(spectrum, n_axis0=40, az_boundary="periodic")
+        np.testing.assert_allclose(recovered, data, atol=1e-12)
+
+    def test_roundtrip_2d_periodic_odd(self):
+        """Round-trip with odd axis-0 length (RFFT edge case)."""
+        rng = np.random.default_rng(42)
+        data = rng.standard_normal((41, 50))
+        spectrum = _forward_transform(data, az_boundary="periodic")
+        recovered = _inverse_transform(spectrum, n_axis0=41, az_boundary="periodic")
+        np.testing.assert_allclose(recovered, data, atol=1e-12)
+
+
+# ===================================================================
+# Convergence test
+# ===================================================================
+
+
+class TestConvergence:
+    """Verify that dct_inpaint converges monotonically."""
+
+    def test_1d_error_decreases_with_iterations(self):
+        """Gap fill error should decrease monotonically with more iterations."""
+        x = np.linspace(0, 2 * np.pi, 200)
+        truth = np.sin(x)
+        data = truth.copy()
+        data[80:120] = np.nan
+        gap = slice(80, 120)
+
+        errors = []
+        for n_iter in [5, 20, 50, 100]:
+            filled = dct_inpaint(data, width=10.0, max_iter=n_iter)
+            mae = np.mean(np.abs(filled[gap] - truth[gap]))
+            errors.append(mae)
+
+        # Error should strictly decrease with more iterations
+        for i in range(len(errors) - 1):
+            assert errors[i] >= errors[i + 1], (
+                f"Error should decrease: iter {[5, 20, 50, 100][i]} "
+                f"(MAE={errors[i]:.6f}) >= iter {[5, 20, 50, 100][i + 1]} "
+                f"(MAE={errors[i + 1]:.6f})"
+            )
+
+    def test_2d_converges_to_accurate_solution(self):
+        """2-D smooth field gap should be filled accurately after convergence."""
+        Y, X = np.meshgrid(
+            np.linspace(0, 2 * np.pi, 50),
+            np.linspace(0, 2 * np.pi, 50),
+        )
+        truth = np.sin(X) + np.cos(Y)
+        data = truth.copy()
+        data[20:30, 20:30] = np.nan
+        hole = np.isnan(data)
+
+        filled = dct_inpaint(data, width=8.0, max_iter=100)
+        gap_mae = np.mean(np.abs(filled[hole] - truth[hole]))
+        # Converged solution should be quite accurate for a smooth field
+        assert gap_mae < 0.1, f"Converged MAE={gap_mae:.4f}, expected < 0.1"
 
 
 # ===================================================================
@@ -274,11 +392,50 @@ class TestDCTInpaintPolar:
             data,
             width=8.0,
             coordinates="polar",
-            az_res_deg=1.0,
             az_boundary="periodic",
         )
         gap_mae = np.mean(np.abs(filled[hole] - truth[hole]))
         assert gap_mae < 0.2, f"Wrapping hole MAE={gap_mae:.4f}, expected < 0.2"
+
+    def test_adaptive_eigenvalues_used(self):
+        """Polar inpaint with az_res_deg should use adaptive eigenvalues."""
+        n_az, n_range = 180, 60
+        az = np.linspace(0, 2 * np.pi, n_az, endpoint=False)
+        rng = np.arange(1, n_range + 1, dtype=float)
+        AZ, RNG = np.meshgrid(az, rng, indexing="ij")
+        truth = 5.0 * np.sin(AZ) * np.exp(-RNG / 30.0)
+
+        # Hole at mid-range
+        hole = np.zeros((n_az, n_range), dtype=bool)
+        cx_az, cx_r, radius = n_az // 2, n_range // 2, 8
+        yy, xx = np.ogrid[:n_az, :n_range]
+        hole[((yy - cx_az) ** 2 + (xx - cx_r) ** 2) < radius**2] = True
+
+        data = truth.copy()
+        data[hole] = np.nan
+
+        # With az_res_deg → adaptive eigenvalues
+        filled_adaptive = dct_inpaint(
+            data,
+            width=10.0,
+            coordinates="polar",
+            az_res_deg=2.0,
+            az_boundary="periodic",
+        )
+        # Without az_res_deg → isotropic eigenvalues
+        filled_iso = dct_inpaint(
+            data,
+            width=10.0,
+            coordinates="polar",
+            az_boundary="periodic",
+        )
+        # They should differ (adaptive is range-aware)
+        assert not np.allclose(filled_adaptive[hole], filled_iso[hole], atol=1e-6), (
+            "Adaptive eigenvalues should produce different fill than isotropic"
+        )
+        # Both should be valid (no NaN)
+        assert not np.any(np.isnan(filled_adaptive))
+        assert not np.any(np.isnan(filled_iso))
 
 
 # ===================================================================
@@ -334,6 +491,33 @@ class TestEdgeCases:
         data = np.array([1.0, np.nan, 3.0])
         with pytest.raises(ValueError, match="Unknown init"):
             dct_inpaint(data, width=2.0, init="magic")
+
+    def test_negative_width_raises(self):
+        """width <= 0 should raise ValueError."""
+        data = np.array([1.0, np.nan, 3.0])
+        with pytest.raises(ValueError, match="width must be positive"):
+            dct_inpaint(data, width=-1.0)
+        with pytest.raises(ValueError, match="width must be positive"):
+            dct_inpaint(data, width=0.0)
+
+    def test_invalid_order_raises(self):
+        """order < 1 should raise ValueError."""
+        data = np.array([1.0, np.nan, 3.0])
+        with pytest.raises(ValueError, match="order must be >= 1"):
+            dct_inpaint(data, width=2.0, order=0)
+
+    def test_invalid_coordinates_raises(self):
+        """Invalid coordinates string should raise ValueError."""
+        data = np.array([1.0, np.nan, 3.0])
+        with pytest.raises(ValueError, match="Unknown coordinates"):
+            dct_inpaint(data, width=2.0, coordinates="spherical")
+
+    def test_invalid_az_boundary_raises(self):
+        """Invalid az_boundary string should raise ValueError."""
+        data = np.ones((20, 20))
+        data[5:10, 5:10] = np.nan
+        with pytest.raises(ValueError, match="Unknown az_boundary"):
+            dct_inpaint(data, width=3.0, coordinates="polar", az_boundary="wrap")
 
 
 # ===================================================================
