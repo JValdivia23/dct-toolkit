@@ -1,9 +1,9 @@
 # AGENTS.md - DCT Toolkit Agent Guidelines
 
 **Project**: dct-toolkit  
-**Version**: 0.1.0-alpha  
-**Status**: Standalone Private Repository  
-**Last Updated**: 2026-02-08
+**Version**: 0.4.0  
+**Status**: Private Repository in Publication Preparation  
+**Last Updated**: 2026-04-10
 
 ---
 
@@ -39,6 +39,31 @@ When running tests or examples from project root:
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
 ```
+
+### Isolated Conda Environment for Testing/Building (Recommended)
+To avoid dependency conflicts when building or testing the package, use an isolated conda environment:
+
+```bash
+# Create isolated environment
+conda create -n dct-toolkit-dev python=3.11 -y
+conda activate dct-toolkit-dev
+
+# Install package in development mode
+pip install -e .
+
+# Run tests
+python -m pytest tests -q
+
+# Build package artifacts (for PyPI)
+conda install -c conda-forge build twine -y
+python -m build
+python -m twine check dist/*
+
+# Clean up when done
+conda deactivate
+```
+
+**Why isolated?** Building tools (`build`, `twine`) and their dependencies can conflict with other packages in your base environment (e.g., Sphinx, Streamlit). Always use an isolated environment for package operations.
 
 ---
 
@@ -121,14 +146,14 @@ dct_toolkit/                    # PROJECT ROOT
 │   ├── cartesian.py          # 2D Cartesian separable smoothing
 │   ├── polar.py              # 2D Polar smoothing (adaptive kernels)
 │   ├── stats.py              # Statistical ops (Normalized Convolution)
-│   └── gap_filling.py         # Iterative gap filling
+│   └── gap_filling.py         # Gap-filling methods (deferred for public stats-first release)
 │
 ├── tests/                     # TEST SUITE ⚠️ TESTS GO HERE
 │   ├── test_core.py
 │   ├── test_cartesian.py
 │   ├── test_polar.py
 │   ├── test_stats.py
-│   └── conftest.py           # Fixtures
+│   └── test_gap_filling.py
 │
 ├── examples/                  # USAGE EXAMPLES
 │   ├── basic_polar.py
@@ -169,7 +194,7 @@ dct_toolkit/                    # PROJECT ROOT
    export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
    python -m pytest tests/ -v
    ```
-   All 19 tests must pass before you start.
+   All tests in `tests/` must pass before you start.
 
 3. **Review Documentation**
    - Check `docs/MATHEMATICAL_BASIS.md` for theory
@@ -201,7 +226,7 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
 python -m pytest tests/ -v
 ```
 
-**Expected Output**: 19 tests passing
+**Expected Output**: all tests passing
 
 **If Tests Fail**:
 - Fix the code, not the tests
@@ -212,7 +237,7 @@ python -m pytest tests/ -v
 
 Before declaring task complete:
 
-- [ ] All 19 tests pass (`pytest tests/ -v`)
+- [ ] All tests pass (`pytest tests/ -v`)
 - [ ] No imports from outside `dct_toolkit/`
 - [ ] All public functions have NumPy-style docstrings
 - [ ] All functions have type hints
@@ -226,7 +251,7 @@ Before declaring task complete:
 
 ## Current Progress & Roadmap
 
-### ✅ Completed (v0.1.0)
+### ✅ Completed (v0.4.0)
 - [x] Core primitives (`core.py`)
   - Transfer functions (boxcar, boxcar_discrete, gaussian)
   - 1D DCT convolution
@@ -237,22 +262,32 @@ Before declaring task complete:
   - Boundary conditions (reflective/periodic)
 - [x] Statistical operations (`stats.py`)
   - Normalized Convolution
-  - dct_count, dct_mean, dct_variance, dct_std
-- [x] Test suite (19 tests, 100% pass)
+  - dct_count, dct_mean, dct_prefill, dct_variance, dct_std
+- [x] Gap-filling module (`gap_filling.py`)
+  - iterative diffusion fill (`iterative_gap_fill`)
+  - DCT-PLS inpainting (`dct_inpaint`)
+- [x] Test suite (`tests/`) passing
 - [x] Documentation suite
-- [x] Gap filling prototype (archived in git history)
 
-### 🚧 In Progress / Next Phase (v0.2.0)
+### 🚧 In Progress: Publication Readiness (stats-first)
+- [x] Fix immediate correctness issues in core statistics path
+- [x] Create a dedicated publication-prep branch
+- [ ] Update `AGENTS.md` / docs to reflect publication plan and current state
+- [ ] Build clean public-facing scope focused on convolution/statistics
+
+### 📋 Before Public Release
+- [x] Add packaging metadata (`pyproject.toml`)
+- [x] Add `LICENSE` and align README badges/claims
+- [ ] Define public API surface (exclude gap filling for initial public release)
+- [ ] Remove or relocate experimental assets from public-facing surface
+- [x] Add CI for tests and minimum quality checks
+
+### 🔭 Future (post-public v1)
 - [ ] 3D support (volumetric data)
 - [ ] Additional kernels (Savitzky-Golay, Hanning)
 - [ ] Performance optimizations (numba?)
 - [ ] Jupyter notebook examples
-- [ ] pip package setup (`setup.py`, `pyproject.toml`)
-
-### 📋 Future (v0.3.0+)
 - [ ] conda-forge distribution
-- [ ] Public GitHub repository
-- [ ] CI/CD with GitHub Actions
 - [ ] Advanced gap filling (constrained optimization)
 - [ ] GPU acceleration (CuPy)
 
@@ -317,14 +352,21 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
 ### Private Repository (Current)
 - Hosted on: GitHub (private)
 - Access: Core team only
-- Branching: Feature branches → main
-- No CI/CD yet (manual testing required)
+- Branching: feature branches → main
+- Manual testing required until CI is added
 
-### Future Public Release
-- Will be made public after v0.3.0
-- MIT License
-- Conda-forge distribution
-- Community contributions welcome
+### Planned Public Release Scope
+- Initial public release is **convolution/statistics focused**
+- Keep DCT + periodic FFT boundary support in smoothing/statistical APIs
+- Defer gap-filling methods from initial public API surface
+- Add packaging metadata + license before publication
+
+### Publication Assets (Current Branch)
+- `pyproject.toml` for pip builds and installation
+- `LICENSE` (MIT)
+- `.github/workflows/tests.yml` (pytest on push/PR)
+- `docs/PUBLICATION_GUIDE.md` with pip + conda-forge steps
+- `conda.recipe/meta.yaml` starter recipe for staged-recipes submission
 
 ---
 
@@ -361,7 +403,7 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
 python -m pytest tests/ -v
 
 # Run example
-python dct_toolkit/examples/basic_polar.py
+python examples/basic_polar.py
 
 # Benchmark
 python exp_v3/test_width_impact.py

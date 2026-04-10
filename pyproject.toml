@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dct-toolkit"
+version = "0.4.0"
+description = "DCT/FFT-based convolutional statistics for Cartesian and polar data"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+authors = [
+  {name = "Jairo M. Valdivia", email = "Jairo.ValdiviaPrado@colorado.edu"},
+]
+keywords = ["dct", "fft", "smoothing", "statistics", "radar", "polar", "convolution"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = [
+  "numpy>=1.20",
+  "scipy>=1.8",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["dct_toolkit"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/dct_toolkit",
+  "/tests",
+  "/docs",
+  "/examples",
+  "/README.md",
+  "/CHANGELOG.md",
+  "/LICENSE",
+  "/AGENTS.md",
+]

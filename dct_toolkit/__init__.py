@@ -1,42 +1,42 @@
-"""
-DCT-Toolkit: Discrete Cosine Transform Statistical Operations.
+"""Public API for DCT-based convolution and statistical operations.
 
-This package provides robust statistical primitives (smoothing, mean, variance)
-based on the Discrete Cosine Transform (DCT). It supports:
-- 1D Data
-- 2D Cartesian Data
-- 2D Polarimetric Data (with adaptive kernels)
-- Iterative gap filling with linear interpolation initialization
-
-Key Functions
--------------
-- dct_smooth: General purpose smoothing
-- dct_count: Effective sample size calculation
-- dct_mean: Robust local mean (Normalized Convolution)
-- dct_variance: Robust local variance
-- dct_std: Robust local standard deviation
-- iterative_gap_fill: Fill gaps using iterative DCT smoothing
-- dct_inpaint: Fill gaps via DCT spectral inpainting (penalised least squares)
-
-Modules
--------
-- core: Transfer functions and 1D primitives
-- cartesian: Separable N-D smoothing
-- polar: Polar coordinate smoothing
-- stats: Statistical operations
-- gap_filling: Iterative gap filling and spectral inpainting
+The public top-level surface is intentionally scoped to smoothing and
+normalized-convolution statistics for the publication-focused release track.
 """
 
-from .core import get_dct_transfer_function, dct_convolve_1d
+from typing import Any
+
+import numpy as np
+
+from .core import dct_convolve_1d, get_dct_transfer_function
 from .cartesian import smooth_cartesian
 from .polar import smooth_polar
-from .stats import dct_count, dct_mean, dct_variance, dct_std
-from .gap_filling import iterative_gap_fill, dct_inpaint
+from .stats import dct_count, dct_mean, dct_prefill, dct_std, dct_variance
 
 __version__ = "0.4.0"
 
 
-def dct_smooth(data, width, coordinates="cartesian", **kwargs):
+__all__ = [
+    "__version__",
+    "get_dct_transfer_function",
+    "dct_convolve_1d",
+    "smooth_cartesian",
+    "smooth_polar",
+    "dct_smooth",
+    "dct_count",
+    "dct_mean",
+    "dct_prefill",
+    "dct_variance",
+    "dct_std",
+]
+
+
+def dct_smooth(
+    data: np.ndarray,
+    width: float,
+    coordinates: str = "cartesian",
+    **kwargs: Any,
+) -> np.ndarray:
     """
     Apply DCT-based smoothing.
 
@@ -58,8 +58,7 @@ def dct_smooth(data, width, coordinates="cartesian", **kwargs):
     """
     if coordinates == "cartesian":
         return smooth_cartesian(data, width, **kwargs)
-    elif coordinates == "polar":
+    if coordinates == "polar":
         # Polar func takes width_pixels
         return smooth_polar(data, width_pixels=width, **kwargs)
-    else:
-        raise ValueError(f"Unknown coordinates: {coordinates}")
+    raise ValueError(f"Unknown coordinates: {coordinates}")

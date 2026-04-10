@@ -1,0 +1,41 @@
+package:
+  name: dct-toolkit
+  version: 0.4.0
+
+source:
+  # Replace with the real PyPI source URL once published.
+  # Example:
+  # url: https://pypi.io/packages/source/d/dct-toolkit/dct_toolkit-0.4.0.tar.gz
+  # sha256: <fill-me>
+  path: ..
+
+build:
+  noarch: python
+  script: "{{ PYTHON }} -m pip install . -vv"
+
+requirements:
+  host:
+    - python >=3.8
+    - pip
+    - hatchling >=1.25.0
+  run:
+    - python >=3.8
+    - numpy >=1.20
+    - scipy >=1.8
+
+test:
+  imports:
+    - dct_toolkit
+  requires:
+    - pytest
+  commands:
+    - python -m pytest tests -q
+
+about:
+  summary: DCT/FFT-based convolutional statistics for Cartesian and polar data
+  license: MIT
+  license_file: LICENSE
+
+extra:
+  recipe-maintainers:
+    - jairo-valdivia

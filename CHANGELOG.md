@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Packaging + distribution groundwork**:
+    - Added `pyproject.toml` (PEP 517/518 via hatchling) for pip/wheel builds.
+    - Added `LICENSE` (MIT).
+    - Added GitHub Actions CI workflow `.github/workflows/tests.yml`.
+    - Added `docs/PUBLICATION_GUIDE.md` with PyPI + conda-forge release steps.
+    - Added `conda.recipe/meta.yaml` starter recipe for conda-forge submission prep.
+- **Statistics API**:
+    - Added `dct_prefill` (iterative normalized-convolution prefill) and exported it
+      in the top-level API.
+    - Added regression tests for `dct_prefill` behavior and parameter validation.
+
+### Changed
+- `stats.py`: improved dtype handling for integer inputs in `dct_mean`/`dct_variance`
+  with floating-point outputs and explicit mask-shape validation.
+- `README.md` and `docs/API_REFERENCE.md`: refocused public surface on
+  convolution/statistics and documented `dct_prefill`.
+- `examples/comprehensive_demo.py`: removed stale experimental imports and aligned
+  with stats-first public API.
+
 ## [0.4.0] - 2026-02-28
 
 ### Added
