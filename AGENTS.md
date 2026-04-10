@@ -2,8 +2,8 @@
 
 **Project**: dct-toolkit  
 **Version**: 0.4.0  
-**Status**: Private Repository in Publication Preparation  
-**Last Updated**: 2026-04-10
+**Status**: Published — PyPI live, conda-forge PR submitted  
+**Last Updated**: 2026-04-11
 
 ---
 
@@ -278,16 +278,17 @@ Before declaring task complete:
 ### 📋 Before Public Release
 - [x] Add packaging metadata (`pyproject.toml`)
 - [x] Add `LICENSE` and align README badges/claims
-- [ ] Define public API surface (exclude gap filling for initial public release)
-- [ ] Remove or relocate experimental assets from public-facing surface
+- [x] Define public API surface (exclude gap filling for initial public release)
+- [x] Remove or relocate experimental assets from public-facing surface
 - [x] Add CI for tests and minimum quality checks
+- [x] Publish to PyPI (v0.4.0 live at https://pypi.org/project/dct-toolkit/)
+- [x] Submit conda-forge recipe (PR open at conda-forge/staged-recipes)
 
 ### 🔭 Future (post-public v1)
 - [ ] 3D support (volumetric data)
 - [ ] Additional kernels (Savitzky-Golay, Hanning)
 - [ ] Performance optimizations (numba?)
 - [ ] Jupyter notebook examples
-- [ ] conda-forge distribution
 - [ ] Advanced gap filling (constrained optimization)
 - [ ] GPU acceleration (CuPy)
 
@@ -349,24 +350,22 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
 
 ## Repository Management
 
-### Private Repository (Current)
-- Hosted on: GitHub (private)
-- Access: Core team only
-- Branching: feature branches → main
-- Manual testing required until CI is added
+### Repository Status
+- GitHub: Private (core team access only)
+- PyPI: **Public** — `pip install dct-toolkit` works
+- conda-forge: **Submitted** — PR open awaiting review at `conda-forge/staged-recipes`
 
 ### Planned Public Release Scope
 - Initial public release is **convolution/statistics focused**
 - Keep DCT + periodic FFT boundary support in smoothing/statistical APIs
 - Defer gap-filling methods from initial public API surface
-- Add packaging metadata + license before publication
 
 ### Publication Assets (Current Branch)
 - `pyproject.toml` for pip builds and installation
 - `LICENSE` (MIT)
 - `.github/workflows/tests.yml` (pytest on push/PR)
 - `docs/PUBLICATION_GUIDE.md` with pip + conda-forge steps
-- `conda.recipe/meta.yaml` starter recipe for staged-recipes submission
+- `conda.recipe/meta.yaml` submitted to `conda-forge/staged-recipes`
 
 ---
 
@@ -395,18 +394,22 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
 ## Quick Reference Card
 
 ```bash
-# Setup
-conda activate myenv
-export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
+# Install (pip)
+pip install dct-toolkit
+
+# Install (conda - once feed stock is merged)
+conda install -c conda-forge dct-toolkit
+
+# Development install from source
+git clone https://github.com/JValdivia23/dct-toolkit.git
+cd dct-toolkit
+pip install -e .
 
 # Test
-python -m pytest tests/ -v
+python -m pytest tests -v
 
 # Run example
 python examples/basic_polar.py
-
-# Benchmark
-python exp_v3/test_width_impact.py
 
 # Check imports (should be empty)
 grep -r "^from \.\./" dct_toolkit/dct_toolkit/
