@@ -59,6 +59,5 @@ def dct_smooth(
     if coordinates == "cartesian":
         return smooth_cartesian(data, width, **kwargs)
     if coordinates == "polar":
-        # Polar func takes width_pixels
         return smooth_polar(data, width_pixels=width, **kwargs)
     raise ValueError(f"Unknown coordinates: {coordinates}")

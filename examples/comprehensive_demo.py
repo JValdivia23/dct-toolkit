@@ -16,7 +16,6 @@ def main() -> None:
 
     np.random.seed(42)
 
-    # 1) 1D smoothing
     t = np.linspace(0, 10, 200)
     signal = np.sin(t) + 0.5 * np.sin(3 * t)
     noise = 0.2 * np.random.randn(len(t))
@@ -29,7 +28,6 @@ def main() -> None:
     print(f"  RMSE raw:      {np.sqrt(np.mean((data - signal) ** 2)):.4f}")
     print(f"  RMSE smoothed: {np.sqrt(np.mean((smoothed - signal) ** 2)):.4f}")
 
-    # 2) Robust statistics with gaps
     mask = np.random.rand(len(t)) > 0.4
     data_gappy = data.copy()
     data_gappy[~mask] = np.nan
@@ -42,7 +40,6 @@ def main() -> None:
     print(f"  RMSE mean:     {np.sqrt(np.mean((robust_mean - signal) ** 2)):.4f}")
     print(f"  Median std:    {np.nanmedian(robust_std):.4f}")
 
-    # 3) 2D polar smoothing with periodic azimuth
     n_az = 360
     n_range = 100
     az_res = 1.0
