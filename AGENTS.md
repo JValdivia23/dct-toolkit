@@ -269,22 +269,23 @@ Before declaring task complete:
 - [x] Test suite (`tests/`) passing
 - [x] Documentation suite
 
-### 🚧 In Progress: Publication Readiness (stats-first)
-- [x] Fix immediate correctness issues in core statistics path
-- [x] Create a dedicated publication-prep branch
-- [ ] Update `AGENTS.md` / docs to reflect publication plan and current state
-- [ ] Build clean public-facing scope focused on convolution/statistics
-
-### 📋 Before Public Release
+### ✅ Completed (Publication Readiness)
+- [x] Fix immediate correctness issues in core statistics path (integer dtype bug)
+- [x] Create dedicated publication-prep branches
+- [x] Update `AGENTS.md` / docs to reflect publication plan
+- [x] Build clean public-facing scope focused on convolution/statistics
 - [x] Add packaging metadata (`pyproject.toml`)
-- [x] Add `LICENSE` and align README badges/claims
+- [x] Add `LICENSE` (MIT) and align README badges/claims
 - [x] Define public API surface (exclude gap filling for initial public release)
-- [x] Remove or relocate experimental assets from public-facing surface
-- [x] Add CI for tests and minimum quality checks
+- [x] Remove experimental assets from public-facing surface
+- [x] Add CI for tests (`.github/workflows/tests.yml`)
 - [x] Publish to PyPI (v0.4.0 live at https://pypi.org/project/dct-toolkit/)
-- [x] Submit conda-forge recipe (PR open at conda-forge/staged-recipes)
+- [x] Submit conda-forge recipe (PR #32930 in review)
+- [x] Merge publication work to `main` branch
+- [x] Tag `v0.4.0` release
+- [x] Create `research/gap-filling` branch for long-term research
 
-### 🔭 Future (post-public v1)
+### 🔭 Future (v0.5.0 and beyond)
 - [ ] 3D support (volumetric data)
 - [ ] Additional kernels (Savitzky-Golay, Hanning)
 - [ ] Performance optimizations (numba?)
@@ -350,22 +351,62 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
 
 ## Repository Management
 
+### Branch Strategy
+
+We use a **trunk-based workflow** with dedicated branches for different purposes:
+
+| Branch | Purpose | Stability |
+|--------|---------|-----------|
+| `main` | Public releases, stable code | **Production-ready** |
+| `research/gap-filling` | Long-term gap-filling research | Experimental |
+| `feature/*` | Short-lived feature development | In-progress |
+
+#### `main` Branch (The Public Package)
+- Always matches the latest PyPI release
+- Contains only public API: core, cartesian, polar, stats
+- Gap-filling code exists in `gap_filling.py` but is **not exported** in `__init__.py`
+- All tests must pass before merging
+
+#### `research/gap-filling` Branch
+- Dedicated branch for long-term gap-filling research
+- Safe to experiment with `dct_inpaint`, `iterative_gap_fill`
+- Regularly merge `main` into this branch to get bug fixes and new features
+- Not merged back to `main` until research matures
+
+**To sync research branch with latest main:**
+```bash
+git checkout research/gap-filling
+git merge main
+```
+
+#### Feature Branches
+For new development (Hanning window, 3D support, notebooks):
+```bash
+# Create feature branch from main
+git checkout main
+git checkout -b feature/hanning-window
+
+# Work, commit, push
+git push origin feature/hanning-window
+
+# When done, merge to main via PR
+git checkout main
+git merge feature/hanning-window
+```
+
 ### Repository Status
 - GitHub: Private (core team access only)
 - PyPI: **Public** — `pip install dct-toolkit` works
-- conda-forge: **Submitted** — PR open awaiting review at `conda-forge/staged-recipes`
+- conda-forge: **Submitted** — PR #32930 in review at `conda-forge/staged-recipes`
 
-### Planned Public Release Scope
-- Initial public release is **convolution/statistics focused**
-- Keep DCT + periodic FFT boundary support in smoothing/statistical APIs
-- Defer gap-filling methods from initial public API surface
+### Current Version
+- `v0.4.0` — Public stats-first release
+- Tag: `git checkout v0.4.0`
 
-### Publication Assets (Current Branch)
-- `pyproject.toml` for pip builds and installation
-- `LICENSE` (MIT)
-- `.github/workflows/tests.yml` (pytest on push/PR)
-- `docs/PUBLICATION_GUIDE.md` with pip + conda-forge steps
-- `conda.recipe/meta.yaml` submitted to `conda-forge/staged-recipes`
+### Gap-Filling Status
+- Code exists in `dct_toolkit/gap_filling.py` (available for import directly)
+- **Not exported** in public API (`__init__.py`) — research-internal
+- Full gap-filling to be released in future v1.x after research matures
 
 ---
 
