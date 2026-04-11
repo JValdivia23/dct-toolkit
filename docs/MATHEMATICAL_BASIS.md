@@ -63,3 +63,15 @@ $$ W_{grid}(r) = \frac{W_{phys}}{r \cdot \Delta \phi_{res}} $$
 - **Range**: Typically non-periodic. We use DCT-II (Reflective BC), effectively assuming $df/dr = 0$ at the boundaries.
 - **Azimuth**: The angular domain wraps around ($0^\circ \equiv 360^\circ$).
   - **Periodic BC**: We use the Real FFT (RFFT) instead of DCT. This enforces circular convolution, ensuring values at $359^\circ$ smooth correctly into values at $0^\circ$.
+
+---
+
+## 4. Spectral Inpainting (Gap Filling)
+
+DCT-based smoothing extends naturally to gap filling via Penalised Least Squares. The full mathematical formulation — including the Tikhonov functional, eigenvalue diagonalisation, iterative algorithm, and adaptive polar eigenvalues — is documented in [Gap Filling Basis](GAP_FILLING_BASIS.md).
+
+Key ideas:
+- **Penalised Least Squares**: Minimise $J(\hat{u}) = \|W(y - \hat{u})\|^2 + \lambda \|\Delta^p \hat{u}\|^2$ where $W = \text{diag}(\text{mask})$.
+- **Spectral filter**: In the DCT/FFT domain, the solution is $\hat{U}[k] = Z[k] / (1 + \lambda \cdot E_p[k])$ where $E_p$ are the eigenvalues of the $p$-th order difference operator.
+- **Width-to-lambda bridge**: The user-facing `width` parameter maps to the Tikhonov parameter via $\lambda = (w^2/24)^p$.
+- **Adaptive polar eigenvalues**: For polar coordinates, the azimuth eigenvalues are scaled per range gate: $E[k_0, j] = \frac{E_0[k_0]}{(j \cdot \Delta\theta)^{2p}} + E_1[j]$, ensuring physically consistent smoothness across the polar grid.
