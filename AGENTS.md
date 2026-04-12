@@ -1,9 +1,9 @@
 # AGENTS.md - DCT Toolkit Agent Guidelines
 
 **Project**: dct-toolkit  
-**Version**: 0.4.0  
-**Status**: Published — PyPI live, conda-forge PR submitted  
-**Last Updated**: 2026-04-11
+**Version**: 0.4.1  
+**Status**: Published — PyPI live, conda-forge PR under review  
+**Last Updated**: 2026-04-12
 
 ---
 
@@ -416,9 +416,15 @@ git merge feature/hanning-window
 - PyPI: **Public** — `pip install dct-toolkit` works
 - conda-forge: **Submitted** — PR #32930 in review at `conda-forge/staged-recipes`
 
+**Check conda-forge PR Status**:
+```bash
+gh pr view 32930 --repo conda-forge/staged-recipes
+# Or visit: https://github.com/conda-forge/staged-recipes/pull/32930
+```
+
 ### Current Version
-- `v0.4.0` — Public stats-first release
-- Tag: `git checkout v0.4.0`
+- `v0.4.1` — Clean core release (experimental content moved to research branch)
+- Tag: `git checkout v0.4.1`
 
 ### Gap-Filling Status
 - Code exists in `dct_toolkit/gap_filling.py` (available for import directly)
@@ -431,16 +437,13 @@ git merge feature/hanning-window
 
 ### Documentation
 - **Math Theory**: `docs/MATHEMATICAL_BASIS.md`
-- **Gap Filling Basis**: `docs/GAP_FILLING_BASIS.md`
 - **API Details**: `docs/API_REFERENCE.md`
-- **Core Test Report**: `exp_v3/TEST_REPORT_CORE.md`
-- **Gap Filling Report**: `exp_v3/TEST_REPORT_GAP_FILLING.md`
+- **Getting Started**: `notebooks/01_getting_started.ipynb`
 
 ### Code Examples
 - **Getting Started Notebook**: `notebooks/01_getting_started.ipynb`
 - **Polar Smoothing**: `examples/basic_polar.py`
 - **Full Demo**: `examples/comprehensive_demo.py`
-- **Gap Filling**: `exp_v3/test_width_impact.py`
 
 ### Key Papers & References
 - Garcia (2010): DCT-PLS (contrast/background)
