@@ -34,6 +34,19 @@ conda activate myenv
 python --version  # Should be 3.8+
 ```
 
+### dct-publish Environment (Publication & Development)
+Pre-configured environment for publication, testing, and notebook development:
+```bash
+conda activate dct-publish
+```
+
+**Packages installed:**
+- Python 3.11, numpy, scipy, pytest
+- xarray, matplotlib, cmweather (radar colormaps)
+- open-radar-data (sample radar datasets)
+- build, twine (for PyPI publishing)
+- dct-toolkit v0.4.0 (editable install)
+
 ### PYTHONPATH
 When running tests or examples from project root:
 ```bash
@@ -64,6 +77,8 @@ conda deactivate
 ```
 
 **Why isolated?** Building tools (`build`, `twine`) and their dependencies can conflict with other packages in your base environment (e.g., Sphinx, Streamlit). Always use an isolated environment for package operations.
+
+**Note:** The `dct-publish` environment is pre-configured for development, testing, and notebook work. Use it for day-to-day development. Create a fresh isolated environment only when you need to build/publish to PyPI.
 
 ---
 
@@ -159,6 +174,9 @@ dct_toolkit/                    # PROJECT ROOT
 │   ├── basic_polar.py
 │   └── comprehensive_demo.py
 │
+├── notebooks/                 # JUPYTER NOTEBOOKS
+│   └── 01_getting_started.ipynb
+│
 ├── exp_v3/                    # EXPERIMENTS (reports + code)
 │   ├── figures/               # Generated figures (PNG/PDF)
 │   ├── test_width_impact.py
@@ -186,13 +204,12 @@ dct_toolkit/                    # PROJECT ROOT
 
 1. **Activate Environment**
    ```bash
-   conda activate myenv
+   conda activate dct-publish
    ```
 
 2. **Verify Baseline**
    ```bash
-   export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
-   python -m pytest tests/ -v
+   python -m pytest /path/to/dct_toolkit/tests/ -v
    ```
    All tests in `tests/` must pass before you start.
 
@@ -222,8 +239,8 @@ dct_toolkit/                    # PROJECT ROOT
 
 **Run Tests**:
 ```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
-python -m pytest tests/ -v
+conda activate dct-publish
+python -m pytest /path/to/dct_toolkit/tests/ -v
 ```
 
 **Expected Output**: all tests passing
@@ -328,7 +345,7 @@ Formula for robust mean with gaps:
 **Problem**: `ModuleNotFoundError: No module named 'dct_toolkit'`
 **Solution**: 
 ```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)/dct_toolkit
+conda activate dct-publish
 ```
 
 ### 2. Path Confusion
@@ -420,6 +437,7 @@ git merge feature/hanning-window
 - **Gap Filling Report**: `exp_v3/TEST_REPORT_GAP_FILLING.md`
 
 ### Code Examples
+- **Getting Started Notebook**: `notebooks/01_getting_started.ipynb`
 - **Polar Smoothing**: `examples/basic_polar.py`
 - **Full Demo**: `examples/comprehensive_demo.py`
 - **Gap Filling**: `exp_v3/test_width_impact.py`
@@ -446,11 +464,17 @@ git clone https://github.com/JValdivia23/dct-toolkit.git
 cd dct-toolkit
 pip install -e .
 
-# Test
+# Activate dct-publish environment (for testing/notebooks)
+conda activate dct-publish
+
+# Run tests (from project root)
 python -m pytest tests -v
 
 # Run example
 python examples/basic_polar.py
+
+# Open Jupyter notebook
+jupyter notebook notebooks/01_getting_started.ipynb
 
 # Check imports (should be empty)
 grep -r "^from \.\./" dct_toolkit/dct_toolkit/
