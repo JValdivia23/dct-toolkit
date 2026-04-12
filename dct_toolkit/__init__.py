@@ -13,7 +13,7 @@ from .cartesian import smooth_cartesian
 from .polar import smooth_polar
 from .stats import dct_count, dct_mean, dct_prefill, dct_std, dct_variance
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 
 __all__ = [

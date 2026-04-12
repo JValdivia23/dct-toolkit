@@ -7,25 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-04-12
+
 ### Added
-- **Packaging + distribution groundwork**:
-    - Added `pyproject.toml` (PEP 517/518 via hatchling) for pip/wheel builds.
-    - Added `LICENSE` (MIT).
-    - Added GitHub Actions CI workflow `.github/workflows/tests.yml`.
-    - Added `docs/PUBLICATION_GUIDE.md` with PyPI + conda-forge release steps.
-    - Added `conda.recipe/meta.yaml` starter recipe for conda-forge submission prep.
-- **Statistics API**:
-    - Added `dct_prefill` (iterative normalized-convolution prefill) and exported it
-      in the top-level API.
-    - Added regression tests for `dct_prefill` behavior and parameter validation.
+- **Jupyter Notebook**: Added `notebooks/01_getting_started.ipynb` with interactive
+  tutorial for DCT smoothing and statistics.
+- Updated `.gitignore` to allow notebooks in `notebooks/` folder.
 
 ### Changed
-- `stats.py`: improved dtype handling for integer inputs in `dct_mean`/`dct_variance`
-  with floating-point outputs and explicit mask-shape validation.
-- `README.md` and `docs/API_REFERENCE.md`: refocused public surface on
-  convolution/statistics and documented `dct_prefill`.
-- `examples/comprehensive_demo.py`: removed stale experimental imports and aligned
-  with stats-first public API.
+- **Repository Cleanup**: Moved experimental content to `research/gap-filling` branch:
+    - Removed `exp_v3/` and `exp_v4/` experimental folders from main branch.
+    - Removed `docs/GAP_FILLING_BASIS.md` and `docs/PUBLICATION_GUIDE.md` from main branch.
+    - `gap_filling.py` remains in codebase but is **not exported** in public API.
+- `__init__.py`: Version bumped to `0.4.1`.
+
+### Notes
+- Main branch now contains only core package functionality for stable PyPI releases.
+- All experimental work (gap filling, inpainting) preserved in `research/gap-filling` branch.
 
 ## [0.4.0] - 2026-02-28
 
