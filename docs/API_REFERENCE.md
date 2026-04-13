@@ -30,10 +30,11 @@ Top-level convenience wrapper for Cartesian and polar smoothing.
 
 - `coordinates='cartesian'`: calls `smooth_cartesian(data, width, **kwargs)`.
 - `coordinates='polar'`: calls `smooth_polar(data, width_pixels=width, **kwargs)`.
+- Default kernel is `'gaussian'` unless `kernel_type` is explicitly provided.
 
 ### `dct_toolkit.cartesian`
 
-#### `smooth_cartesian(data, width, kernel_type='boxcar')`
+#### `smooth_cartesian(data, width, kernel_type='gaussian')`
 Apply separable DCT smoothing to N-D Cartesian data.
 
 - `data` (`np.ndarray`): Any-dimensional array.
@@ -42,7 +43,7 @@ Apply separable DCT smoothing to N-D Cartesian data.
 
 ### `dct_toolkit.polar`
 
-#### `smooth_polar(data, width_pixels, az_res_deg=1.0, az_boundary='reflective', range_boundary='reflective', kernel_type='boxcar')`
+#### `smooth_polar(data, width_pixels, az_res_deg=1.0, az_boundary='reflective', range_boundary='reflective', kernel_type='gaussian')`
 Apply smoothing to 2D polar data (`n_azimuth`, `n_range`) with adaptive azimuth kernels.
 
 - `az_boundary='reflective'`: DCT-based reflective boundary.

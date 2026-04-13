@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Default smoothing kernel is now `'gaussian'` for Cartesian and polar smoothing paths
+  (`smooth_cartesian`, `smooth_polar`, and all wrapper/statistics calls that inherit
+  those defaults).
+
 ## [0.4.1] - 2026-04-12
 
 ### Added
