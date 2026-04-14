@@ -168,8 +168,57 @@ def test_prefill_invalid_parameters():
     data = np.arange(10, dtype=float)
     with pytest.raises(ValueError, match="width must be > 0"):
         dct_prefill(data, width=0.0)
-    with pytest.raises(ValueError, match="max_iter must be >= 1"):
+    with pytest.raises(ValueError, match="max_iter must be >= 1 or None"):
         dct_prefill(data, width=2.0, max_iter=0)
+
+
+def test_prefill_max_iter_none_converges_or_caps():
+    """max_iter=None should run with the internal cap and produce finite fills."""
+    data = np.array([1.0, np.nan, np.nan, 4.0], dtype=float)
+    filled = dct_prefill(data, width=2.0, max_iter=None)
+    assert np.all(np.isfinite(filled))
+
+
+def test_prefill_residual_nearest_1d():
+    """Residual nearest fill should replace unresolved 1D targets."""
+    data = np.array([np.nan, 1.0, np.nan, np.nan, 3.0, np.nan], dtype=float)
+
+    filled = dct_prefill(
+        data,
+        width=1.0,
+        kernel_type="boxcar_discrete",
+        max_iter=1,
+    )
+
+    expected = np.array([1.0, 1.0, 1.0, 3.0, 3.0, 3.0], dtype=float)
+    assert np.allclose(filled, expected)
+
+
+def test_prefill_residual_nearest_polar_axis1():
+    """Polar residual nearest fill should operate along range axis first."""
+    data = np.array(
+        [
+            [1.0, np.nan, np.nan, 4.0, np.nan],
+        ],
+        dtype=float,
+    )
+
+    filled = dct_prefill(
+        data,
+        width=1.0,
+        coordinates="polar",
+        az_res_deg=1.0,
+        kernel_type="boxcar_discrete",
+        max_iter=1,
+    )
+
+    expected = np.array(
+        [
+            [1.0, 1.0, 4.0, 4.0, 4.0],
+        ],
+        dtype=float,
+    )
+    assert np.allclose(filled, expected)
 
 
 def test_prefill_polar_periodic_smoke():

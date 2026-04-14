@@ -6,10 +6,16 @@ using Normalized Convolution. This approach naturally handles gaps (NaNs)
 without requiring explicit pre-filling.
 """
 
+from typing import Optional
+
 import numpy as np
+import scipy.ndimage
 from .core import get_dct_transfer_function, dct_convolve_1d
 from .cartesian import smooth_cartesian
 from .polar import smooth_polar
+
+
+_PREFILL_MAX_ITER_CAP = 20
 
 
 def _get_smooth_func(coordinates: str):
@@ -20,6 +26,111 @@ def _get_smooth_func(coordinates: str):
         return smooth_polar
     else:
         raise ValueError(f"Unknown coordinates: {coordinates}")
+
+
+def _fill_nan_nearest_along_axis(
+    data: np.ndarray,
+    fill_target: np.ndarray,
+    axis: int,
+) -> np.ndarray:
+    """Fill target NaNs by nearest finite neighbor along one axis."""
+    out = np.asarray(data).copy()
+    target = np.asarray(fill_target, dtype=bool)
+
+    if out.shape != target.shape:
+        raise ValueError(
+            f"fill_target shape {target.shape} does not match data shape {out.shape}"
+        )
+
+    axis = int(axis)
+    if axis < 0:
+        axis += out.ndim
+    if axis < 0 or axis >= out.ndim:
+        raise ValueError(f"Invalid axis {axis} for shape {out.shape}")
+
+    moved = np.moveaxis(out, axis, -1)
+    moved_target = np.moveaxis(target, axis, -1)
+    n_axis = moved.shape[-1]
+    flat_data = moved.reshape(-1, n_axis)
+    flat_target = moved_target.reshape(-1, n_axis)
+    idx = np.arange(n_axis)
+
+    for row, row_target in zip(flat_data, flat_target):
+        unresolved = row_target & np.isnan(row)
+        if not np.any(unresolved):
+            continue
+
+        finite_idx = np.flatnonzero(np.isfinite(row))
+        if finite_idx.size == 0:
+            continue
+
+        miss_idx = idx[unresolved]
+        insert_pos = np.searchsorted(finite_idx, miss_idx, side="left")
+
+        left_pos = np.clip(insert_pos - 1, 0, finite_idx.size - 1)
+        right_pos = np.clip(insert_pos, 0, finite_idx.size - 1)
+        left_idx = finite_idx[left_pos]
+        right_idx = finite_idx[right_pos]
+
+        use_left = (miss_idx - left_idx) <= (right_idx - miss_idx)
+        nearest_idx = np.where(use_left, left_idx, right_idx)
+        row[miss_idx] = row[nearest_idx]
+
+    return np.moveaxis(flat_data.reshape(moved.shape), -1, axis)
+
+
+def _fill_nan_nearest(
+    data: np.ndarray,
+    fill_target: np.ndarray,
+    primary_axis: int,
+) -> np.ndarray:
+    """Fill target NaNs using nearest neighbors with axis-first/global fallback."""
+    out = np.asarray(data).copy()
+    target = np.asarray(fill_target, dtype=bool)
+
+    if out.shape != target.shape:
+        raise ValueError(
+            f"fill_target shape {target.shape} does not match data shape {out.shape}"
+        )
+
+    if out.ndim == 0:
+        return out
+
+    axis = int(primary_axis)
+    if axis < 0:
+        axis += out.ndim
+    if axis < 0 or axis >= out.ndim:
+        raise ValueError(f"Invalid primary_axis {primary_axis} for shape {out.shape}")
+
+    unresolved = target & np.isnan(out)
+    if not np.any(unresolved):
+        return out
+
+    axis_order = [axis] + [ax for ax in range(out.ndim) if ax != axis]
+
+    # First pass: fast axis-wise nearest fills.
+    for ax in axis_order:
+        if not np.any(unresolved):
+            break
+        out = _fill_nan_nearest_along_axis(out, unresolved, axis=ax)
+        unresolved = target & np.isnan(out)
+
+    if not np.any(unresolved):
+        return out
+
+    # Final fallback: global nearest finite neighbor in N-D index space.
+    finite = np.isfinite(out)
+    if not np.any(finite):
+        return out
+
+    nearest_indices = scipy.ndimage.distance_transform_edt(
+        ~finite,
+        return_distances=False,
+        return_indices=True,
+    )
+    nearest_coords = tuple(idx[unresolved] for idx in nearest_indices)
+    out[unresolved] = out[nearest_coords]
+    return out
 
 
 def dct_count(
@@ -145,7 +256,7 @@ def dct_prefill(
     width: float,
     coordinates: str = "cartesian",
     fill_mask: np.ndarray = None,
-    max_iter: int = 3,
+    max_iter: Optional[int] = None,
     **kwargs,
 ) -> np.ndarray:
     """
@@ -166,8 +277,10 @@ def dct_prefill(
     fill_mask : np.ndarray, optional
         Boolean mask where True marks positions to fill/replace.
         If None, all NaN positions are filled.
-    max_iter : int, default=3
-        Maximum number of fill iterations.
+    max_iter : int or None, default=None
+        Maximum number of normalized-convolution iterations.
+        If None, iterate until convergence or until a safety cap of 20
+        iterations is reached.
     **kwargs
         Additional keyword arguments passed to ``dct_mean``
         (e.g. ``az_res_deg``, ``az_boundary``, ``kernel_type``).
@@ -184,11 +297,14 @@ def dct_prefill(
     - ``fill_mask`` uses the convention True = "fill this position".
     - If ``fill_mask`` is provided and a marked value cannot be estimated,
       original finite values are kept.
+    - After iterative normalized-convolution filling, any remaining target NaNs
+      are filled by nearest-neighbor propagation to guarantee finite output when
+      at least one finite value exists.
     """
     if width <= 0:
         raise ValueError(f"width must be > 0, got {width}")
-    if max_iter < 1:
-        raise ValueError(f"max_iter must be >= 1, got {max_iter}")
+    if max_iter is not None and max_iter < 1:
+        raise ValueError(f"max_iter must be >= 1 or None, got {max_iter}")
 
     data_array = np.asarray(data)
     out_dtype = np.result_type(data_array.dtype, np.float64)
@@ -214,7 +330,9 @@ def dct_prefill(
     mean_kwargs = dict(kwargs)
     mean_kwargs.setdefault("kernel_type", "gaussian")
 
-    for _ in range(int(max_iter)):
+    max_iter_eff = _PREFILL_MAX_ITER_CAP if max_iter is None else int(max_iter)
+
+    for _ in range(max_iter_eff):
         candidates = target & np.isnan(out)
         if not np.any(candidates):
             break
@@ -239,6 +357,11 @@ def dct_prefill(
     if use_target_fallback:
         fallback = target & np.isnan(out) & np.isfinite(original)
         out[fallback] = original[fallback]
+
+    unresolved = target & np.isnan(out)
+    if np.any(unresolved):
+        fill_axis = 1 if (coordinates == "polar" and out.ndim >= 2) else -1
+        out = _fill_nan_nearest(out, unresolved, primary_axis=fill_axis)
 
     return out
 
