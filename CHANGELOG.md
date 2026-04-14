@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Added anisotropic width support while keeping scalar width as the default path:
+  - Cartesian smoothing/stats now accept `width` as scalar or length-`ndim` sequence.
+  - Polar smoothing/stats now accept `width` as scalar or
+    `(width_azimuth, width_range)`.
+  - `dct_count` now uses anisotropic window area (`prod(widths)` in Cartesian,
+    `width_range * width_azimuth/(r*dtheta)` in polar).
+
+### Added
+- Added parity and artifact-regression tests for scalar-vs-vector isotropic widths,
+  plus anisotropic Cartesian/polar smoke coverage.
+
 ## [0.5.0] - 2026-04-14
 
 ### Changed

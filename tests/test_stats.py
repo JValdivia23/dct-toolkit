@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+
 from dct_toolkit.stats import dct_count, dct_mean, dct_prefill, dct_variance, dct_std
 
 
@@ -371,3 +372,102 @@ def test_variance_std_stable_finite_heavy_gaps_polar():
     assert np.all(np.isfinite(var))
     assert np.all(np.isfinite(std))
     assert np.nanmin(var) >= 0.0
+
+
+def test_stats_isotropic_scalar_equals_vector_cartesian():
+    """Stats outputs should match between scalar and isotropic vector widths."""
+    rng = np.random.default_rng(13)
+    data = rng.standard_normal((12, 10, 8))
+    data[3:6, 2:5, 1:4] = np.nan
+    mask = np.isfinite(data)
+
+    width_scalar = 3.0
+    width_vector = [3.0, 3.0, 3.0]
+
+    mean_s = dct_mean(
+        data, width=width_scalar, coordinates="cartesian", restore_input_nan=False
+    )
+    mean_v = dct_mean(
+        data, width=width_vector, coordinates="cartesian", restore_input_nan=False
+    )
+    var_s = dct_variance(
+        data, width=width_scalar, coordinates="cartesian", restore_input_nan=False
+    )
+    var_v = dct_variance(
+        data, width=width_vector, coordinates="cartesian", restore_input_nan=False
+    )
+    std_s = dct_std(
+        data, width=width_scalar, coordinates="cartesian", restore_input_nan=False
+    )
+    std_v = dct_std(
+        data, width=width_vector, coordinates="cartesian", restore_input_nan=False
+    )
+    cnt_s = dct_count(
+        mask, width=width_scalar, coordinates="cartesian", restore_input_nan=False
+    )
+    cnt_v = dct_count(
+        mask, width=width_vector, coordinates="cartesian", restore_input_nan=False
+    )
+
+    assert np.allclose(mean_s, mean_v, atol=1e-12)
+    assert np.allclose(var_s, var_v, atol=1e-12)
+    assert np.allclose(std_s, std_v, atol=1e-12)
+    assert np.allclose(cnt_s, cnt_v, atol=1e-12)
+
+
+def test_stats_isotropic_scalar_equals_vector_polar():
+    """Polar stats outputs should match between scalar and isotropic vector widths."""
+    n_az, n_range = 180, 80
+    az = np.linspace(0, 2 * np.pi, n_az, endpoint=False)
+    rng = np.arange(1, n_range + 1, dtype=float)
+    AZ, R = np.meshgrid(az, rng, indexing="ij")
+    data = np.sin(AZ) * np.exp(-R / 35.0)
+    data[25:50, 20:30] = np.nan
+
+    width_scalar = 5.0
+    width_vector = (5.0, 5.0)
+    kwargs = {
+        "coordinates": "polar",
+        "az_res_deg": 360.0 / n_az,
+        "az_boundary": "periodic",
+        "restore_input_nan": False,
+    }
+
+    mean_s = dct_mean(data, width=width_scalar, **kwargs)
+    mean_v = dct_mean(data, width=width_vector, **kwargs)
+    var_s = dct_variance(data, width=width_scalar, **kwargs)
+    var_v = dct_variance(data, width=width_vector, **kwargs)
+    std_s = dct_std(data, width=width_scalar, **kwargs)
+    std_v = dct_std(data, width=width_vector, **kwargs)
+    cnt_s = dct_count(
+        np.isfinite(data),
+        width=width_scalar,
+        coordinates="polar",
+        az_res_deg=360.0 / n_az,
+        az_boundary="periodic",
+        restore_input_nan=False,
+    )
+    cnt_v = dct_count(
+        np.isfinite(data),
+        width=width_vector,
+        coordinates="polar",
+        az_res_deg=360.0 / n_az,
+        az_boundary="periodic",
+        restore_input_nan=False,
+    )
+
+    assert np.allclose(mean_s, mean_v, atol=1e-12)
+    assert np.allclose(var_s, var_v, atol=1e-12)
+    assert np.allclose(std_s, std_v, atol=1e-12)
+    assert np.allclose(cnt_s, cnt_v, atol=1e-12)
+
+
+def test_prefill_accepts_anisotropic_width_cartesian():
+    """Prefill should accept anisotropic Cartesian widths."""
+    data = np.linspace(0.0, 1.0, 60, dtype=float).reshape(5, 4, 3)
+    data[2, :, 1] = np.nan
+
+    filled = dct_prefill(
+        data, width=[3.0, 2.0, 1.5], coordinates="cartesian", max_iter=3
+    )
+    assert np.all(np.isfinite(filled))

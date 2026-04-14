@@ -7,13 +7,19 @@ from dct_toolkit.core import dct_convolve_1d, get_dct_transfer_function
 
 def _smooth_cartesian_reference(
     data: np.ndarray,
-    width: float,
+    width,
     kernel_type: str = "gaussian",
 ) -> np.ndarray:
     """Reference separable smoothing using explicit axis-wise 1D operations."""
+    width_values = np.asarray(width, dtype=float)
+    if width_values.ndim == 0:
+        widths = np.full(data.ndim, float(width_values), dtype=float)
+    else:
+        widths = width_values
+
     result = data.copy()
-    for axis, n in enumerate(data.shape):
-        transfer = get_dct_transfer_function(n, kernel_type, width)
+    for axis, (n, width_axis) in enumerate(zip(data.shape, widths)):
+        transfer = get_dct_transfer_function(n, kernel_type, float(width_axis))
         result = dct_convolve_1d(result, transfer, axis=axis)
     return result
 
@@ -69,5 +75,30 @@ def test_nd_matches_axiswise_reference(shape, kernel_type):
 
     result_nd = smooth_cartesian(data, width=3.5, kernel_type=kernel_type)
     result_ref = _smooth_cartesian_reference(data, width=3.5, kernel_type=kernel_type)
+
+    assert np.allclose(result_nd, result_ref, atol=1e-12)
+
+
+def test_isotropic_scalar_equals_isotropic_vector():
+    """Scalar width should match equivalent isotropic vector widths."""
+    rng = np.random.default_rng(7)
+    data = rng.standard_normal((11, 9, 7))
+
+    result_scalar = smooth_cartesian(data, width=3.0, kernel_type="gaussian")
+    result_vector = smooth_cartesian(
+        data, width=[3.0, 3.0, 3.0], kernel_type="gaussian"
+    )
+
+    assert np.allclose(result_scalar, result_vector, atol=1e-12)
+
+
+def test_anisotropic_width_matches_axiswise_reference():
+    """Per-axis widths should match explicit axis-wise separable reference."""
+    rng = np.random.default_rng(11)
+    data = rng.standard_normal((13, 10, 8, 6))
+    widths = [4.0, 2.5, 1.5, 3.0]
+
+    result_nd = smooth_cartesian(data, width=widths, kernel_type="gaussian")
+    result_ref = _smooth_cartesian_reference(data, width=widths, kernel_type="gaussian")
 
     assert np.allclose(result_nd, result_ref, atol=1e-12)

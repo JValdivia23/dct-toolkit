@@ -10,13 +10,29 @@ from typing import Optional
 
 import numpy as np
 import scipy.ndimage
-from .core import get_dct_transfer_function, dct_convolve_1d
+
+from ._widths import WidthLike, normalize_widths
 from .cartesian import smooth_cartesian
 from .polar import smooth_polar
 
 
 _PREFILL_MAX_ITER_CAP = 20
 _MEAN_DENOMINATOR_FLOOR = 1e-3
+
+
+def _normalize_width_for_coordinates(
+    width: WidthLike,
+    coordinates: str,
+    data_ndim: int,
+) -> np.ndarray:
+    """Normalize width input for Cartesian or polar calls."""
+    if coordinates == "cartesian":
+        expected_ndim = data_ndim
+    elif coordinates == "polar":
+        expected_ndim = 2
+    else:
+        raise ValueError(f"Unknown coordinates: {coordinates}")
+    return normalize_widths(width, expected_ndim, name="width")
 
 
 def _get_smooth_func(coordinates: str):
@@ -27,6 +43,19 @@ def _get_smooth_func(coordinates: str):
         return smooth_polar
     else:
         raise ValueError(f"Unknown coordinates: {coordinates}")
+
+
+def _smooth_with_coordinates(
+    data: np.ndarray,
+    width: WidthLike,
+    coordinates: str,
+    **kwargs,
+) -> np.ndarray:
+    """Apply smoothing while mapping width to Cartesian/polar signatures."""
+    smooth_func = _get_smooth_func(coordinates)
+    if coordinates == "polar":
+        return smooth_func(data, width_pixels=width, **kwargs)
+    return smooth_func(data, width, **kwargs)
 
 
 def _fill_nan_nearest_along_axis(
@@ -136,7 +165,7 @@ def _fill_nan_nearest(
 
 def dct_count(
     mask: np.ndarray,
-    width: float,
+    width: WidthLike,
     coordinates: str = "cartesian",
     restore_input_nan: bool = True,
     **kwargs,
@@ -148,8 +177,10 @@ def dct_count(
     ----------
     mask : np.ndarray
         Boolean or binary mask (1=valid, 0=invalid).
-    width : float
-        Smoothing width.
+    width : float or sequence of float
+        Smoothing width. Scalar input is isotropic. Sequence input is
+        anisotropic and must match dimensionality (Cartesian) or follow
+        ``(width_azimuth, width_range)`` for polar.
     coordinates : str
         'cartesian' or 'polar'.
     restore_input_nan : bool, default=True
@@ -162,11 +193,13 @@ def dct_count(
     count : np.ndarray
         Effective count of valid samples within the smoothing window.
     """
-    smooth_func = _get_smooth_func(coordinates)
     mask_bool = np.asarray(mask, dtype=bool)
+    widths = _normalize_width_for_coordinates(width, coordinates, mask_bool.ndim)
 
     # Density = Smooth(Indicator)
-    density = smooth_func(mask_bool.astype(float), width, **kwargs)
+    density = _smooth_with_coordinates(
+        mask_bool.astype(float), width, coordinates, **kwargs
+    )
 
     # Keep density physically valid for indicator masks.
     density = np.nan_to_num(density, nan=0.0, posinf=1.0, neginf=0.0)
@@ -174,8 +207,7 @@ def dct_count(
 
     # Area Calculation
     if coordinates == "cartesian":
-        # Area = width^ndim (assuming isotropic width)
-        area = width**mask_bool.ndim
+        area = float(np.prod(widths))
     elif coordinates == "polar":
         # Area varies with range: w_az(r) * w_range
         # w_range = width
@@ -192,11 +224,13 @@ def dct_count(
         az_res_rad = np.deg2rad(az_res_deg)
         r_indices = np.arange(1, n_range + 1)
 
+        width_azimuth, width_range = widths
+
         # w_beams[r] is width in azimuth indices
-        w_beams = width / (r_indices * az_res_rad)
+        w_beams = float(width_azimuth) / (r_indices * az_res_rad)
 
         # Effective area in (az, range) index space
-        area_1d = width * w_beams
+        area_1d = float(width_range) * w_beams
         area = np.tile(area_1d, (n_az, 1))
     else:
         area = 1.0
@@ -210,7 +244,7 @@ def dct_count(
 
 def dct_mean(
     data: np.ndarray,
-    width: float,
+    width: WidthLike,
     coordinates: str = "cartesian",
     mask: np.ndarray = None,
     restore_input_nan: bool = True,
@@ -225,8 +259,10 @@ def dct_mean(
     ----------
     data : np.ndarray
         Input data (can contain NaNs).
-    width : float
-        Smoothing width.
+    width : float or sequence of float
+        Smoothing width. Scalar input is isotropic. Sequence input is
+        anisotropic and must match dimensionality (Cartesian) or follow
+        ``(width_azimuth, width_range)`` for polar.
     coordinates : str
         'cartesian' or 'polar'.
     mask : np.ndarray, optional
@@ -251,8 +287,8 @@ def dct_mean(
     if den_floor is None:
         den_floor = _MEAN_DENOMINATOR_FLOOR if stable_fallback else 1e-10
 
-    smooth_func = _get_smooth_func(coordinates)
     data_array = np.asarray(data)
+    _normalize_width_for_coordinates(width, coordinates, data_array.ndim)
     out_dtype = np.result_type(data_array.dtype, np.float64)
 
     if mask is None:
@@ -270,10 +306,12 @@ def dct_mean(
     # Fill NaNs with 0 for the convolution (they are masked out anyway)
     data_filled = data_array.astype(out_dtype, copy=True)
     data_filled[~valid_data] = 0.0
-    numerator = smooth_func(data_filled, width, **kwargs)
+    numerator = _smooth_with_coordinates(data_filled, width, coordinates, **kwargs)
 
     # 2. Denominator: Smooth(Mask)
-    denominator = smooth_func(valid_data.astype(out_dtype), width, **kwargs)
+    denominator = _smooth_with_coordinates(
+        valid_data.astype(out_dtype), width, coordinates, **kwargs
+    )
 
     # 3. Normalized Ratio
     # Handle division by zero/instability where denominator is very small.
@@ -297,7 +335,7 @@ def dct_mean(
             _stable_fallback=False,
             **kwargs,
         )
-        fallback = smooth_func(prefilled, width, **kwargs)
+        fallback = _smooth_with_coordinates(prefilled, width, coordinates, **kwargs)
         mean[invalid_den] = fallback[invalid_den]
 
     if restore_input_nan:
@@ -308,7 +346,7 @@ def dct_mean(
 
 def dct_prefill(
     data: np.ndarray,
-    width: float,
+    width: WidthLike,
     coordinates: str = "cartesian",
     fill_mask: np.ndarray = None,
     max_iter: Optional[int] = 3,
@@ -325,8 +363,11 @@ def dct_prefill(
     ----------
     data : np.ndarray
         Input data array. NaN values indicate gaps when ``fill_mask`` is None.
-    width : float
-        Smoothing width used by normalized convolution. Must be > 0.
+    width : float or sequence of float
+        Smoothing width used by normalized convolution. Scalar input is
+        isotropic. Sequence input is anisotropic and must match
+        dimensionality (Cartesian) or follow
+        ``(width_azimuth, width_range)`` for polar. All values must be > 0.
     coordinates : str, default='cartesian'
         Coordinate mode for smoothing: ``'cartesian'`` or ``'polar'``.
     fill_mask : np.ndarray, optional
@@ -356,12 +397,12 @@ def dct_prefill(
       are filled by nearest-neighbor propagation to guarantee finite output when
       at least one finite value exists.
     """
-    if width <= 0:
-        raise ValueError(f"width must be > 0, got {width}")
+    data_array = np.asarray(data)
+    _normalize_width_for_coordinates(width, coordinates, data_array.ndim)
+
     if max_iter is not None and max_iter < 1:
         raise ValueError(f"max_iter must be >= 1 or None, got {max_iter}")
 
-    data_array = np.asarray(data)
     out_dtype = np.result_type(data_array.dtype, np.float64)
     original = data_array.astype(out_dtype, copy=True)
 
@@ -425,7 +466,7 @@ def dct_prefill(
 
 def dct_variance(
     data: np.ndarray,
-    width: float,
+    width: WidthLike,
     coordinates: str = "cartesian",
     mask: np.ndarray = None,
     restore_input_nan: bool = True,
@@ -441,14 +482,17 @@ def dct_variance(
     ----------
     data : np.ndarray
         Input data.
-    width : float
-        Smoothing width.
+    width : float or sequence of float
+        Smoothing width. Scalar input is isotropic. Sequence input is
+        anisotropic and must match dimensionality (Cartesian) or follow
+        ``(width_azimuth, width_range)`` for polar.
 
     Returns
     -------
     variance : np.ndarray
     """
     data_array = np.asarray(data)
+    _normalize_width_for_coordinates(width, coordinates, data_array.ndim)
     out_dtype = np.result_type(data_array.dtype, np.float64)
     data_float = data_array.astype(out_dtype, copy=False)
 
@@ -494,13 +538,16 @@ def dct_variance(
 
 def dct_std(
     data: np.ndarray,
-    width: float,
+    width: WidthLike,
     coordinates: str = "cartesian",
     mask: np.ndarray = None,
     restore_input_nan: bool = True,
     **kwargs,
 ) -> np.ndarray:
     """Compute robust local standard deviation."""
+    data_array = np.asarray(data)
+    _normalize_width_for_coordinates(width, coordinates, data_array.ndim)
+
     var = dct_variance(
         data,
         width,

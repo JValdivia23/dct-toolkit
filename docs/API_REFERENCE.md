@@ -43,7 +43,7 @@ Top-level convenience wrapper for Cartesian and polar smoothing.
 Apply separable DCT smoothing to N-D Cartesian data.
 
 - `data` (`np.ndarray`): Any-dimensional array.
-- `width` (float): Isotropic smoothing width.
+- `width` (`float` or sequence): Scalar = isotropic. Sequence length must be `data.ndim`.
 - `kernel_type` (str): `'boxcar'`, `'boxcar_discrete'`, `'gaussian'`.
 
 ### `dct_toolkit.polar`
@@ -51,6 +51,8 @@ Apply separable DCT smoothing to N-D Cartesian data.
 #### `smooth_polar(data, width_pixels, az_res_deg=1.0, az_boundary='reflective', range_boundary='reflective', kernel_type='gaussian')`
 Apply smoothing to 2D polar data (`n_azimuth`, `n_range`) with adaptive azimuth kernels.
 
+- `width_pixels` (`float` or `(width_azimuth, width_range)`): Scalar keeps isotropic
+  behavior; tuple enables anisotropic polar smoothing.
 - `az_boundary='reflective'`: DCT-based reflective boundary.
 - `az_boundary='periodic'`: real FFT periodic boundary (0/360 wrap).
 - `range_boundary`: currently `'reflective'`.
@@ -70,6 +72,7 @@ regions.
 #### `dct_count(mask, width, coordinates='cartesian', **kwargs)`
 Compute effective local sample count.
 
+- `width` (`float` or sequence): Scalar = isotropic, sequence = anisotropic.
 - Density is clipped to `[0, 1]` to keep counts physically valid.
 - `restore_input_nan=True` by default masks output where input `mask` is False.
 
@@ -79,6 +82,7 @@ Compute robust local mean:
 `mu = smooth(data * mask) / smooth(mask)`
 
 - Returns floating-point output.
+- `width` (`float` or sequence): Scalar = isotropic, sequence = anisotropic.
 - If `mask` is provided, it must match `data.shape`.
 - In low-support regions, an internal prefill-and-smooth fallback is used to
   keep results finite and stable when support exists.
@@ -87,6 +91,7 @@ Compute robust local mean:
 #### `dct_prefill(data, width, coordinates='cartesian', fill_mask=None, max_iter=3, **kwargs)`
 Fill gaps using iterative normalized convolution based on `dct_mean`.
 
+- `width` (`float` or sequence): Scalar = isotropic, sequence = anisotropic.
 - `fill_mask` uses `True = fill this position`.
 - If `fill_mask` is None, NaN positions are filled.
 - Preserves non-target values exactly.
@@ -103,6 +108,7 @@ Compute robust local variance:
 `Var = E[X^2] - (E[X])^2`
 
 - `restore_input_nan=True` by default masks output where input support is invalid.
+- `width` (`float` or sequence): Scalar = isotropic, sequence = anisotropic.
 
 #### `dct_std(data, width, coordinates='cartesian', mask=None, **kwargs)`
 Compute robust local standard deviation:
@@ -110,6 +116,7 @@ Compute robust local standard deviation:
 `Std = sqrt(Var)`
 
 - `restore_input_nan=True` by default masks output where input support is invalid.
+- `width` (`float` or sequence): Scalar = isotropic, sequence = anisotropic.
 
 ---
 

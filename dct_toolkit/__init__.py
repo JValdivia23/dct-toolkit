@@ -9,6 +9,7 @@ from typing import Any, Optional
 import numpy as np
 
 from .core import dct_convolve_1d, get_dct_transfer_function
+from ._widths import WidthLike
 from .cartesian import smooth_cartesian
 from .polar import smooth_polar
 from .stats import dct_count, dct_mean, dct_prefill, dct_std, dct_variance
@@ -33,7 +34,7 @@ __all__ = [
 
 def dct_smooth(
     data: np.ndarray,
-    width: float,
+    width: WidthLike,
     coordinates: str = "cartesian",
     prefill_max_iter: Optional[int] = 3,
     **kwargs: Any,
@@ -45,8 +46,9 @@ def dct_smooth(
     ----------
     data : np.ndarray
         Input data.
-    width : float
-        Smoothing width.
+    width : float or sequence of float
+        Smoothing width. Scalar input keeps isotropic behavior. Sequence
+        input allows anisotropic widths.
     coordinates : str, default='cartesian'
         'cartesian' or 'polar'.
     prefill_max_iter : int or None, default=3

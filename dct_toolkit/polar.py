@@ -10,13 +10,15 @@ import numpy as np
 import scipy.fft
 import warnings
 from typing import Tuple, Optional
+
+from ._widths import WidthLike, normalize_widths
 from .core import get_dct_transfer_function
 
 
 def compute_polar_transfer_functions(
     shape: Tuple[int, int],
     az_res_deg: float,
-    width_pixels: float,
+    width_pixels: WidthLike,
     kernel_type: str = "gaussian",
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -30,8 +32,9 @@ def compute_polar_transfer_functions(
         (n_azimuth, n_range).
     az_res_deg : float
         Azimuth resolution in degrees.
-    width_pixels : float
-        Target smoothing width in pixels (at reference range).
+    width_pixels : float or sequence of float
+        Width specification in pixels as ``(width_azimuth, width_range)``.
+        Scalar input applies isotropic width in both dimensions.
     kernel_type : str
         'boxcar', 'boxcar_discrete', 'gaussian'.
 
@@ -44,9 +47,10 @@ def compute_polar_transfer_functions(
     """
     n_az, n_range = shape
     az_res_rad = np.deg2rad(az_res_deg)
+    width_azimuth, width_range = normalize_widths(width_pixels, 2, name="width_pixels")
 
     # 1. Range Transfer Function (fixed width)
-    H_range = get_dct_transfer_function(n_range, kernel_type, width_pixels)
+    H_range = get_dct_transfer_function(n_range, kernel_type, float(width_range))
 
     # 2. Azimuth Transfer Function (varies with range)
     # We construct it column-wise (per range gate)
@@ -60,7 +64,7 @@ def compute_polar_transfer_functions(
     # w_beams(r) = width_pixels / (r * az_res_rad)
     # This assumes range resolution corresponds to r=1 unit distance
     # and we want physical arc length ~ width_pixels * range_resolution
-    w_beams = width_pixels / (r_indices * az_res_rad)
+    w_beams = float(width_azimuth) / (r_indices * az_res_rad)
 
     # Generate H for each range bin
     # Vectorized generation is hard because 'width' changes, loop is safer/clearer
@@ -106,7 +110,7 @@ def _smooth_azimuth_periodic(data: np.ndarray, H_az: np.ndarray) -> np.ndarray:
 def compute_polar_transfer_functions_v2(
     shape: Tuple[int, int],
     az_res_deg: float,
-    width_pixels: float,
+    width_pixels: WidthLike,
     kernel_type: str = "gaussian",
     az_boundary: str = "reflective",
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -121,13 +125,14 @@ def compute_polar_transfer_functions_v2(
     """
     n_az, n_range = shape
     az_res_rad = np.deg2rad(az_res_deg)
+    width_azimuth, width_range = normalize_widths(width_pixels, 2, name="width_pixels")
 
     # Range H (Always DCT/Reflective for now)
-    H_range = get_dct_transfer_function(n_range, kernel_type, width_pixels)
+    H_range = get_dct_transfer_function(n_range, kernel_type, float(width_range))
 
     # Azimuth H
     r_indices = np.arange(1, n_range + 1)
-    w_beams = width_pixels / (r_indices * az_res_rad)
+    w_beams = float(width_azimuth) / (r_indices * az_res_rad)
 
     if az_boundary == "reflective":
         # Use standard DCT transfer function generator
@@ -194,7 +199,7 @@ def compute_polar_transfer_functions_v2(
 
 def smooth_polar(
     data: np.ndarray,
-    width_pixels: float,
+    width_pixels: WidthLike,
     az_res_deg: float = 1.0,
     az_boundary: str = "reflective",
     range_boundary: str = "reflective",
@@ -207,8 +212,9 @@ def smooth_polar(
     ----------
     data : np.ndarray
         Input array of shape (n_azimuth, n_range).
-    width_pixels : float
-        Smoothing width in pixels (at reference range).
+    width_pixels : float or sequence of float
+        Width specification in pixels as ``(width_azimuth, width_range)``.
+        Scalar input applies isotropic width in both dimensions.
     az_res_deg : float
         Azimuth resolution in degrees.
     az_boundary : str
