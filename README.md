@@ -16,28 +16,18 @@ convolution/statistics surface.
 
 ## Installation
 
-### pip (available now)
+### pip
 
 ```bash
 pip install dct-toolkit
-```
-
-Or install from source:
-
-```bash
-git clone <your-repo-url>
-cd dct_toolkit
-pip install -e .
 ```
 
 ### conda (pending conda-forge approval)
 
-Conda-forge packaging has been submitted (PR under review). Until the feedstock is merged, install with pip inside a conda environment:
+Conda-forge packaging has been submitted (PR under review). This option would be available soon:
 
 ```bash
-conda create -n dct-toolkit python=3.11 -y
-conda activate dct-toolkit
-pip install dct-toolkit
+conda install dct-toolkit
 ```
 
 ## Quick Start
@@ -57,9 +47,9 @@ mu = dct.dct_mean(data, width=10.0)
 ### 1b) Prefill Before Full-Field Smoothing
 
 ```python
-prefilled = dct.dct_prefill(data, width=10.0, max_iter=3)
 smoothed = dct.dct_smooth(prefilled, width=10.0)
 ```
+This function will call `dct.dct_prefill()` internally. We need to fill NaNs as requirement for DCT or FFT operations by default.
 
 ### 2) Polar Smoothing with Periodic Azimuth
 
@@ -102,7 +92,7 @@ std = dct.dct_std(data, width=10.0)
 - Fills gaps (NaNs or a specified mask) using iterative local averaging.
 - Preserves non-target values exactly.
 - Intended as a **pre-processing step** before full-field smoothing.
-- `max_iter=3` by default for predictable runtime; `max_iter=None` runs until convergence.
+- `max_iter=3` by default for predictable runtime; use `max_iter=None` to iterate until convergence (all NaNs filled). By default, any remaining NaNs are filled with the nearest valid data.
 
 See the Quick Start section above for usage examples.
 
