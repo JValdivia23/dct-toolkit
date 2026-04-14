@@ -1,9 +1,9 @@
 # AGENTS.md - DCT Toolkit Agent Guidelines
 
 **Project**: dct-toolkit  
-**Version**: 0.4.1  
+**Version**: 0.5.0  
 **Status**: Published — PyPI live, conda-forge PR under review  
-**Last Updated**: 2026-04-12
+**Last Updated**: 2026-04-14
 
 ---
 
@@ -423,8 +423,9 @@ gh pr view 32930 --repo conda-forge/staged-recipes
 ```
 
 ### Current Version
-- `v0.4.1` — Clean core release (experimental content moved to research branch)
-- Tag: `git checkout v0.4.1`
+- `v0.5.0` — N-D Cartesian smoothing backend upgrade (`dctn/idctn`) with
+  validated 3D/4D parity and stats compatibility.
+- Tag: `git checkout v0.5.0`
 
 ### Gap-Filling Status
 - Code exists in `dct_toolkit/gap_filling.py` (available for import directly)

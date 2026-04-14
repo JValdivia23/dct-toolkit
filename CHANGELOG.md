@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-14
+
 ### Changed
+- `smooth_cartesian` now uses a single N-D spectral pass (`dctn/idctn`) with
+  broadcasted separable transfer functions, preserving output equivalence while
+  reducing transform overhead for higher-dimensional Cartesian arrays.
 - Default smoothing kernel is now `'gaussian'` for Cartesian and polar smoothing paths
   (`smooth_cartesian`, `smooth_polar`, and all wrapper/statistics calls that inherit
   those defaults).
@@ -31,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added NaN-policy regression tests for `dct_smooth` and new `dct_prefill` iteration/
   residual behavior (`tests/test_api.py`, updates in `tests/test_stats.py`).
+- Added Cartesian N-D equivalence tests to verify artifact-free 3D/4D outputs and
+  new N-D statistics smoke tests (`tests/test_cartesian.py`, `tests/test_stats_nd.py`).
 
 ## [0.4.1] - 2026-04-12
 
