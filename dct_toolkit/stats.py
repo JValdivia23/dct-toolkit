@@ -209,15 +209,8 @@ def dct_count(
     if coordinates == "cartesian":
         area = float(np.prod(widths))
     elif coordinates == "polar":
-        # Area varies with range: w_az(r) * w_range
-        # w_range = width
-        # w_az(r) = width / (r * d_theta) [in beam units]
-        # But wait, w_beams was used in smoothing.
-        # Area in index-space (which DCT operates on) is what matters for "count".
-        # DCT smoothing effectively averages over a window defined in index space
-        # but weighted by the kernel.
-        # For polar, the azimuth kernel width in indices is w_beams[r].
-        # So Area[r] = width * w_beams[r]
+        # Effective window area in index space varies with range:
+        # area(r) = width_range * width_azimuth / (r * dtheta)
 
         n_az, n_range = mask_bool.shape
         az_res_deg = kwargs.get("az_res_deg", 1.0)

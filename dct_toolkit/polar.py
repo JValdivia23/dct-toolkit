@@ -9,7 +9,7 @@ the smoothing kernel in the spectral domain.
 import numpy as np
 import scipy.fft
 import warnings
-from typing import Tuple, Optional
+from typing import Tuple
 
 from ._widths import WidthLike, normalize_widths
 from .core import get_dct_transfer_function
@@ -20,11 +20,13 @@ def compute_polar_transfer_functions(
     az_res_deg: float,
     width_pixels: WidthLike,
     kernel_type: str = "gaussian",
+    az_boundary: str = "reflective",
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute transfer functions for polar smoothing.
 
-    The azimuth kernel width adapts with range to maintain constant physical width.
+    The azimuth kernel width adapts with range to maintain constant physical
+    width.
 
     Parameters
     ----------
@@ -37,11 +39,16 @@ def compute_polar_transfer_functions(
         Scalar input applies isotropic width in both dimensions.
     kernel_type : str
         'boxcar', 'boxcar_discrete', 'gaussian'.
+    az_boundary : str, default='reflective'
+        Azimuth boundary handling: ``'reflective'`` (DCT) or
+        ``'periodic'`` (RFFT).
 
     Returns
     -------
     H_az : np.ndarray
-        Azimuth transfer function of shape (n_az, n_range).
+        Azimuth transfer function.
+        Shape is ``(n_azimuth, n_range)`` for reflective boundaries and
+        ``(n_azimuth // 2 + 1, n_range)`` for periodic boundaries.
     H_range : np.ndarray
         Range transfer function of shape (n_range,).
     """
@@ -49,122 +56,29 @@ def compute_polar_transfer_functions(
     az_res_rad = np.deg2rad(az_res_deg)
     width_azimuth, width_range = normalize_widths(width_pixels, 2, name="width_pixels")
 
-    # 1. Range Transfer Function (fixed width)
+    # Range transfer function (reflective/DCT).
     H_range = get_dct_transfer_function(n_range, kernel_type, float(width_range))
 
-    # 2. Azimuth Transfer Function (varies with range)
-    # We construct it column-wise (per range gate)
-    H_az_T = np.zeros((n_range, n_az))
-
-    # Pre-calculate range indices (1-based to avoid div by zero)
-    # Range gate index roughly correlates with distance
-    r_indices = np.arange(1, n_range + 1)
-
-    # Calculate effective beam width for each range
-    # w_beams(r) = width_pixels / (r * az_res_rad)
-    # This assumes range resolution corresponds to r=1 unit distance
-    # and we want physical arc length ~ width_pixels * range_resolution
-    w_beams = float(width_azimuth) / (r_indices * az_res_rad)
-
-    # Generate H for each range bin
-    # Vectorized generation is hard because 'width' changes, loop is safer/clearer
-    # Optimization: group ranges with similar widths if needed, but for now loop is fine
-    for i in range(n_range):
-        H_az_T[i, :] = get_dct_transfer_function(n_az, kernel_type, w_beams[i])
-
-    H_az = H_az_T.T  # (n_az, n_range)
-
-    return H_az, H_range
-
-
-def _smooth_azimuth_periodic(data: np.ndarray, H_az: np.ndarray) -> np.ndarray:
-    """
-    Smooth azimuth using Real FFT (Periodic Boundary Condition).
-
-    H_az needs to be adapted for DFT frequencies: k = 0, ..., n/2
-    Current get_dct_transfer_function returns DCT frequencies (k=0..n-1).
-    We need to re-compute H for DFT frequencies if using periodic BC.
-
-    Wait, get_dct_transfer_function computes H based on k.
-    For DCT: theta = pi * k / (2n) or pi * k / n
-    For DFT: theta = 2 * pi * k / n
-
-    So we cannot reuse H_az directly if it was computed for DCT.
-    We need a separate transfer function generator for Periodic (DFT).
-    """
-    # This helper logic handles the re-computation internally for now
-    n_az, n_range = data.shape
-    n_rfft = n_az // 2 + 1
-
-    # We need to regenerate H_az for DFT frequencies
-    # This is a bit inefficient to do here, but cleaner than complicating the public API
-    # Let's extract the width parameter from H_az? No, passed implicitly.
-    # Ideally, compute_polar_transfer_functions should know about BC.
-    pass
-
-
-# Revised approach: compute_polar_transfer_functions should return
-# the correct H based on the boundary condition (DCT vs DFT).
-
-
-def compute_polar_transfer_functions_v2(
-    shape: Tuple[int, int],
-    az_res_deg: float,
-    width_pixels: WidthLike,
-    kernel_type: str = "gaussian",
-    az_boundary: str = "reflective",
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compute transfer functions for polar smoothing.
-
-    Parameters
-    ----------
-    ...
-    az_boundary : str
-        'reflective' (DCT) or 'periodic' (DFT/RFFT).
-    """
-    n_az, n_range = shape
-    az_res_rad = np.deg2rad(az_res_deg)
-    width_azimuth, width_range = normalize_widths(width_pixels, 2, name="width_pixels")
-
-    # Range H (Always DCT/Reflective for now)
-    H_range = get_dct_transfer_function(n_range, kernel_type, float(width_range))
-
-    # Azimuth H
+    # Azimuth widths adapt with range: w_az(r) = width_azimuth / (r * dtheta).
     r_indices = np.arange(1, n_range + 1)
     w_beams = float(width_azimuth) / (r_indices * az_res_rad)
 
     if az_boundary == "reflective":
-        # Use standard DCT transfer function generator
         H_az_T = np.zeros((n_range, n_az))
         for i in range(n_range):
             H_az_T[i, :] = get_dct_transfer_function(n_az, kernel_type, w_beams[i])
         H_az = H_az_T.T
 
     elif az_boundary == "periodic":
-        # Use DFT transfer function generator
-        # RFFT frequencies: k = 0, 1, ..., n/2
         n_freq = n_az // 2 + 1
         H_az_T = np.zeros((n_range, n_freq))
-
         k = np.arange(n_freq)
 
         for i in range(n_range):
             width = w_beams[i]
 
-            # Compute DFT Transfer Function
             if kernel_type == "boxcar":
-                # H = sin(W * theta) / (W * sin(theta))
-                # DFT theta = pi * k / n (half period? No, full period 2pi)
-                # Sinc is sin(W * omega/2) / ...
-                # Let's match the standard definition:
-                # continuous: sin(f*W)/...
-                # DFT freq bin k corresponds to frequency k/N
-
-                # Adapting from examples/dct_smoothing.py:
-                # theta_half = (np.pi * k) / n_az  (Note: DCT was pi*k/(2n))
                 theta_half = (np.pi * k) / n_az
-
                 H = np.zeros(n_freq)
                 H[0] = 1.0
                 mask = k > 0
@@ -177,14 +91,11 @@ def compute_polar_transfer_functions_v2(
                 H_az_T[i, :] = H
 
             elif kernel_type == "gaussian":
-                # omega = 2 * pi * k / n
                 omega = (2 * np.pi * k) / n_az
                 sigma = width / np.sqrt(12)
                 H_az_T[i, :] = np.exp(-0.5 * (omega * sigma) ** 2)
 
             else:
-                # Fallback for others (discrete boxcar not implemented for periodic yet)
-                # Use Gaussian approx
                 omega = (2 * np.pi * k) / n_az
                 sigma = width / np.sqrt(12)
                 H_az_T[i, :] = np.exp(-0.5 * (omega * sigma) ** 2)
@@ -195,6 +106,25 @@ def compute_polar_transfer_functions_v2(
         raise ValueError(f"Unknown azimuth boundary: {az_boundary}")
 
     return H_az, H_range
+
+
+def compute_polar_transfer_functions_v2(
+    shape: Tuple[int, int],
+    az_res_deg: float,
+    width_pixels: WidthLike,
+    kernel_type: str = "gaussian",
+    az_boundary: str = "reflective",
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Backward-compatible wrapper for ``compute_polar_transfer_functions``.
+    """
+    return compute_polar_transfer_functions(
+        shape=shape,
+        az_res_deg=az_res_deg,
+        width_pixels=width_pixels,
+        kernel_type=kernel_type,
+        az_boundary=az_boundary,
+    )
 
 
 def smooth_polar(
@@ -241,7 +171,7 @@ def smooth_polar(
         )
 
     # Get transfer functions
-    H_az, H_range = compute_polar_transfer_functions_v2(
+    H_az, H_range = compute_polar_transfer_functions(
         data.shape, az_res_deg, width_pixels, kernel_type, az_boundary
     )
 

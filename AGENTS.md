@@ -45,7 +45,7 @@ conda activate dct-publish
 - xarray, matplotlib, cmweather (radar colormaps)
 - open-radar-data (sample radar datasets)
 - build, twine (for PyPI publishing)
-- dct-toolkit v0.4.0 (editable install)
+- dct-toolkit v0.5.0 (editable install)
 
 ### PYTHONPATH
 When running tests or examples from project root:
