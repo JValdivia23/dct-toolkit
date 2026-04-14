@@ -113,6 +113,83 @@ Compute robust local standard deviation:
 
 ---
 
+## Workflow Diagram
+
+All high-level functions below support `coordinates='cartesian'` or
+`coordinates='polar'` where applicable (`dct_smooth`, `dct_count`, `dct_mean`,
+`dct_prefill`, `dct_variance`, `dct_std`).
+
+```text
+                             +-------------------------------+
+                             | get_dct_transfer_function     |
+                             +---------------+---------------+
+                                             |
+                                             v
+                             +-------------------------------+
+                             | dct_convolve_1d               |
+                             +---------------+---------------+
+                                             |
+                        +--------------------+--------------------+
+                        |                                         |
+                        v                                         v
+            +---------------------------+             +---------------------------+
+            | smooth_cartesian          |             | smooth_polar              |
+            | (N-D Cartesian smoother)  |             | (2D polar smoother)       |
+            +-------------+-------------+             +-------------+-------------+
+                          |                                         |
+                          +--------------------+--------------------+
+                                               |
+                                               v
+                                      +------------------+
+                                      | dct_smooth       |
+                                      | wrapper          |
+                                      +--------+---------+
+                                               |
+                                      if NaNs: v
+                                      +------------------+
+                                      | dct_prefill      |
+                                      | iterative fill   |
+                                      +--------+---------+
+                                               |
+                                               v
+                                   (smooth again, restore NaN mask)
+
+
+    +--------------------+    uses smooth_* on mask and scales by area
+    | dct_count          |-----------------------------------------------> output count
+    +--------------------+
+
+    +--------------------+    normalized convolution: smooth(x*mask)/smooth(mask)
+    | dct_mean           |-----------------------------------------------> output mean
+    +---------+----------+
+              |
+              +--> internal low-support fallback may call dct_prefill
+
+    +--------------------+    calls dct_mean twice: E[x] and E[x^2]
+    | dct_variance       |-----------------------------------------------> output variance
+    +---------+----------+
+              |
+              v
+    +--------------------+    sqrt(variance)
+    | dct_std            |-----------------------------------------------> output std
+    +--------------------+
+```
+
+## Quick Cheat Sheet
+
+- `get_dct_transfer_function`: Build 1D spectral kernel `H[k]` from width and kernel type.
+- `dct_convolve_1d`: Apply one 1D DCT convolution along one axis using a precomputed `H`.
+- `smooth_cartesian`: Low-level separable smoothing for N-D Cartesian arrays.
+- `smooth_polar`: Low-level smoothing for 2D polar arrays with adaptive azimuth width.
+- `dct_smooth`: Top-level "just smooth this" wrapper (auto-pre-fills NaNs, then restores NaN mask).
+- `dct_mean`: NaN-robust local mean via normalized convolution.
+- `dct_count`: Effective local sample count from a validity mask.
+- `dct_prefill`: Iterative normalized-convolution gap fill (often used before full-field smoothing).
+- `dct_variance`: NaN-robust local variance from normalized-convolution moments.
+- `dct_std`: NaN-robust local standard deviation (`sqrt(dct_variance)`).
+
+---
+
 ## Scope Note
 
 Gap-filling methods are intentionally excluded from this public API reference for the
