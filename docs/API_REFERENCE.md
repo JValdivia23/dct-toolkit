@@ -85,7 +85,8 @@ Compute robust local mean:
 - `width` (`float` or sequence): Scalar = isotropic, sequence = anisotropic.
 - If `mask` is provided, it must match `data.shape`.
 - In low-support regions, an internal prefill-and-smooth fallback is used to
-  keep results finite and stable when support exists.
+  keep results finite and stable when support exists. The denominator threshold
+  is `1e-3` (internal constant `_MEAN_DENOMINATOR_FLOOR`).
 - `restore_input_nan=True` by default masks output where input support is invalid.
 
 #### `dct_prefill(data, width, coordinates='cartesian', fill_mask=None, max_iter=3, **kwargs)`
