@@ -63,8 +63,15 @@ Apply smoothing to 2D polar data (`n_azimuth`, `n_range`) with adaptive azimuth 
 
 All statistical functions use normalized convolution and support NaN-containing inputs.
 
+For heavily gapped fields, statistical functions include internal stability
+fallbacks to avoid unstable normalized-convolution ratios in poorly supported
+regions.
+
 #### `dct_count(mask, width, coordinates='cartesian', **kwargs)`
 Compute effective local sample count.
+
+- Density is clipped to `[0, 1]` to keep counts physically valid.
+- `restore_input_nan=True` by default masks output where input `mask` is False.
 
 #### `dct_mean(data, width, coordinates='cartesian', mask=None, **kwargs)`
 Compute robust local mean:
@@ -73,6 +80,9 @@ Compute robust local mean:
 
 - Returns floating-point output.
 - If `mask` is provided, it must match `data.shape`.
+- In low-support regions, an internal prefill-and-smooth fallback is used to
+  keep results finite and stable when support exists.
+- `restore_input_nan=True` by default masks output where input support is invalid.
 
 #### `dct_prefill(data, width, coordinates='cartesian', fill_mask=None, max_iter=3, **kwargs)`
 Fill gaps using iterative normalized convolution based on `dct_mean`.
@@ -92,10 +102,14 @@ Compute robust local variance:
 
 `Var = E[X^2] - (E[X])^2`
 
+- `restore_input_nan=True` by default masks output where input support is invalid.
+
 #### `dct_std(data, width, coordinates='cartesian', mask=None, **kwargs)`
 Compute robust local standard deviation:
 
 `Std = sqrt(Var)`
+
+- `restore_input_nan=True` by default masks output where input support is invalid.
 
 ---
 

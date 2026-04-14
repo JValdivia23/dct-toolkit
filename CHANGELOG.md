@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exists.
 - Default prefill iteration count is now `max_iter=3` for predictable runtime. You can
   still set `max_iter=None` to iterate until convergence (safety cap: 20).
+- `dct_mean`, `dct_variance`, and `dct_std` now include stable fallback handling for
+  poorly conditioned normalized-convolution regions (heavy-gap volumes), preventing
+  NaN/overflow behavior in low-support areas when valid support exists.
+- `dct_count` now clips smoothed density to `[0, 1]` before area scaling to keep
+  effective sample counts physically valid.
+- `dct_count`, `dct_mean`, `dct_variance`, and `dct_std` now default to
+  `restore_input_nan=True`, masking outputs at original invalid locations while
+  keeping valid locations stable and finite.
 
 ### Added
 - Added NaN-policy regression tests for `dct_smooth` and new `dct_prefill` iteration/

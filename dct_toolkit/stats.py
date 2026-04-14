@@ -16,6 +16,7 @@ from .polar import smooth_polar
 
 
 _PREFILL_MAX_ITER_CAP = 20
+_MEAN_DENOMINATOR_FLOOR = 1e-3
 
 
 def _get_smooth_func(coordinates: str):
@@ -134,7 +135,11 @@ def _fill_nan_nearest(
 
 
 def dct_count(
-    mask: np.ndarray, width: float, coordinates: str = "cartesian", **kwargs
+    mask: np.ndarray,
+    width: float,
+    coordinates: str = "cartesian",
+    restore_input_nan: bool = True,
+    **kwargs,
 ) -> np.ndarray:
     """
     Compute effective sample count (local density * window area).
@@ -147,6 +152,8 @@ def dct_count(
         Smoothing width.
     coordinates : str
         'cartesian' or 'polar'.
+    restore_input_nan : bool, default=True
+        If True, output is set to NaN where ``mask`` is False.
     **kwargs
         Additional arguments passed to smoothing function (e.g. az_res_deg).
 
@@ -156,14 +163,19 @@ def dct_count(
         Effective count of valid samples within the smoothing window.
     """
     smooth_func = _get_smooth_func(coordinates)
+    mask_bool = np.asarray(mask, dtype=bool)
 
     # Density = Smooth(Indicator)
-    density = smooth_func(mask.astype(float), width, **kwargs)
+    density = smooth_func(mask_bool.astype(float), width, **kwargs)
+
+    # Keep density physically valid for indicator masks.
+    density = np.nan_to_num(density, nan=0.0, posinf=1.0, neginf=0.0)
+    density = np.clip(density, 0.0, 1.0)
 
     # Area Calculation
     if coordinates == "cartesian":
         # Area = width^ndim (assuming isotropic width)
-        area = width**mask.ndim
+        area = width**mask_bool.ndim
     elif coordinates == "polar":
         # Area varies with range: w_az(r) * w_range
         # w_range = width
@@ -175,7 +187,7 @@ def dct_count(
         # For polar, the azimuth kernel width in indices is w_beams[r].
         # So Area[r] = width * w_beams[r]
 
-        n_az, n_range = mask.shape
+        n_az, n_range = mask_bool.shape
         az_res_deg = kwargs.get("az_res_deg", 1.0)
         az_res_rad = np.deg2rad(az_res_deg)
         r_indices = np.arange(1, n_range + 1)
@@ -189,7 +201,11 @@ def dct_count(
     else:
         area = 1.0
 
-    return density * area
+    count = density * area
+    if restore_input_nan:
+        count = count.astype(np.result_type(count.dtype, np.float64), copy=False)
+        count[~mask_bool] = np.nan
+    return count
 
 
 def dct_mean(
@@ -197,6 +213,7 @@ def dct_mean(
     width: float,
     coordinates: str = "cartesian",
     mask: np.ndarray = None,
+    restore_input_nan: bool = True,
     **kwargs,
 ) -> np.ndarray:
     """
@@ -214,18 +231,32 @@ def dct_mean(
         'cartesian' or 'polar'.
     mask : np.ndarray, optional
         Valid data mask. If None, inferred from ~isnan(data).
+    restore_input_nan : bool, default=True
+        If True, output is set to NaN where input support is invalid.
 
     Returns
     -------
     mean : np.ndarray
         Local mean (floating-point array).
+
+    Notes
+    -----
+    For poorly conditioned support regions (near-zero or negative smoothed
+    mask values), this function falls back to a prefill-and-smooth estimate
+    at affected points to keep outputs finite and stable when support exists.
     """
+    stable_fallback = bool(kwargs.pop("_stable_fallback", True))
+    prefill_max_iter = kwargs.pop("_prefill_max_iter", 3)
+    den_floor = kwargs.pop("_denominator_floor", None)
+    if den_floor is None:
+        den_floor = _MEAN_DENOMINATOR_FLOOR if stable_fallback else 1e-10
+
     smooth_func = _get_smooth_func(coordinates)
     data_array = np.asarray(data)
     out_dtype = np.result_type(data_array.dtype, np.float64)
 
     if mask is None:
-        mask = ~np.isnan(data_array)
+        mask = np.isfinite(data_array)
 
     mask = np.asarray(mask, dtype=bool)
     if mask.shape != data_array.shape:
@@ -233,20 +264,44 @@ def dct_mean(
             f"Mask shape {mask.shape} does not match data shape {data_array.shape}"
         )
 
+    valid_data = mask & np.isfinite(data_array)
+
     # 1. Numerator: Smooth(Data * Mask)
     # Fill NaNs with 0 for the convolution (they are masked out anyway)
     data_filled = data_array.astype(out_dtype, copy=True)
-    data_filled[~mask] = 0.0
+    data_filled[~valid_data] = 0.0
     numerator = smooth_func(data_filled, width, **kwargs)
 
     # 2. Denominator: Smooth(Mask)
-    denominator = smooth_func(mask.astype(out_dtype), width, **kwargs)
+    denominator = smooth_func(valid_data.astype(out_dtype), width, **kwargs)
 
     # 3. Normalized Ratio
-    # Handle division by zero where denominator is very small (no valid data nearby)
-    valid_den = denominator > 1e-10
+    # Handle division by zero/instability where denominator is very small.
+    valid_den = np.isfinite(denominator) & (denominator > float(den_floor))
     mean = np.full(data_array.shape, np.nan, dtype=out_dtype)
     np.divide(numerator, denominator, out=mean, where=valid_den)
+
+    # 4. Stability fallback in under-supported regions.
+    invalid_den = ~valid_den
+    if stable_fallback and np.any(invalid_den) and np.any(valid_data):
+        fill_target = ~valid_data
+        fallback_input = data_array.astype(out_dtype, copy=True)
+        fallback_input[fill_target] = np.nan
+
+        prefilled = dct_prefill(
+            fallback_input,
+            width=width,
+            coordinates=coordinates,
+            fill_mask=fill_target,
+            max_iter=prefill_max_iter,
+            _stable_fallback=False,
+            **kwargs,
+        )
+        fallback = smooth_func(prefilled, width, **kwargs)
+        mean[invalid_den] = fallback[invalid_den]
+
+    if restore_input_nan:
+        mean[~valid_data] = np.nan
 
     return mean
 
@@ -329,6 +384,7 @@ def dct_prefill(
 
     mean_kwargs = dict(kwargs)
     mean_kwargs.setdefault("kernel_type", "gaussian")
+    mean_kwargs["_stable_fallback"] = False
 
     max_iter_eff = _PREFILL_MAX_ITER_CAP if max_iter is None else int(max_iter)
 
@@ -346,6 +402,7 @@ def dct_prefill(
             width=width,
             coordinates=coordinates,
             mask=valid_current,
+            restore_input_nan=False,
             **mean_kwargs,
         )
         newly_filled = candidates & np.isfinite(estimate)
@@ -371,6 +428,7 @@ def dct_variance(
     width: float,
     coordinates: str = "cartesian",
     mask: np.ndarray = None,
+    restore_input_nan: bool = True,
     **kwargs,
 ) -> np.ndarray:
     """
@@ -395,18 +453,41 @@ def dct_variance(
     data_float = data_array.astype(out_dtype, copy=False)
 
     if mask is None:
-        mask = ~np.isnan(data_float)
+        mask = np.isfinite(data_float)
+
+    mask = np.asarray(mask, dtype=bool)
+    if mask.shape != data_float.shape:
+        raise ValueError(
+            f"Mask shape {mask.shape} does not match data shape {data_float.shape}"
+        )
+    valid_data = mask & np.isfinite(data_float)
 
     # E[X]
-    mean = dct_mean(data_float, width, coordinates, mask, **kwargs)
+    mean = dct_mean(
+        data_float,
+        width,
+        coordinates,
+        mask,
+        restore_input_nan=False,
+        **kwargs,
+    )
 
     # E[X^2]
     data_sq = data_float**2
-    mean_sq = dct_mean(data_sq, width, coordinates, mask, **kwargs)
+    mean_sq = dct_mean(
+        data_sq,
+        width,
+        coordinates,
+        mask,
+        restore_input_nan=False,
+        **kwargs,
+    )
 
     # Var = E[X^2] - E[X]^2
     # Use maximum(0) to avoid negative variance due to numerical precision
     variance = np.maximum(mean_sq - mean**2, 0.0)
+    if restore_input_nan:
+        variance[~valid_data] = np.nan
 
     return variance
 
@@ -416,8 +497,16 @@ def dct_std(
     width: float,
     coordinates: str = "cartesian",
     mask: np.ndarray = None,
+    restore_input_nan: bool = True,
     **kwargs,
 ) -> np.ndarray:
     """Compute robust local standard deviation."""
-    var = dct_variance(data, width, coordinates, mask, **kwargs)
+    var = dct_variance(
+        data,
+        width,
+        coordinates,
+        mask,
+        restore_input_nan=restore_input_nan,
+        **kwargs,
+    )
     return np.sqrt(var)

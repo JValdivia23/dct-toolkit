@@ -30,7 +30,7 @@ def test_count_uniform_gaps():
 
     # In interior, should be approximately density * width
     # 0.5 * 20 = 10
-    interior_mean = np.mean(count[20:-20])
+    interior_mean = np.nanmean(count[20:-20])
     assert np.abs(interior_mean - 10.0) < 1.0
 
 
@@ -38,8 +38,10 @@ def test_mean_uniform_with_gaps(uniform_with_gaps):
     """Mean of uniform data should be 1.0 even with 50% gaps."""
     data, mask = uniform_with_gaps
     mean = dct_mean(data, width=20.0)
-    # The mean should be very close to 1.0 everywhere (ignoring edges)
-    assert np.allclose(mean[20:-20], 1.0, atol=0.05)
+    interior = slice(20, -20)
+    # Valid locations remain near 1.0, gap locations are restored to NaN.
+    assert np.allclose(mean[interior][mask[interior]], 1.0, atol=0.05)
+    assert np.all(np.isnan(mean[interior][~mask[interior]]))
 
 
 def test_variance_normal_distribution(normal_with_gaps):
@@ -47,7 +49,7 @@ def test_variance_normal_distribution(normal_with_gaps):
     var = dct_variance(normal_with_gaps, width=30.0)
 
     # Check interior mean variance
-    mean_var = np.mean(var[30:-30])
+    mean_var = np.nanmean(var[30:-30])
     # Expect ~1.0. Tolerance 0.2 allows for sample variance fluctuation
     assert np.abs(mean_var - 1.0) < 0.2
 
@@ -59,7 +61,7 @@ def test_variance_uniform():
     data[::4] = np.nan  # 25% gaps
 
     var = dct_variance(data, width=50.0)
-    mean_var = np.mean(var[50:-50])
+    mean_var = np.nanmean(var[50:-50])
 
     expected = 1.0 / 12.0
     assert np.abs(mean_var - expected) < 0.01
@@ -69,7 +71,7 @@ def test_std_consistency(normal_with_gaps):
     """std = sqrt(variance)."""
     var = dct_variance(normal_with_gaps, width=30.0)
     std = dct_std(normal_with_gaps, width=30.0)
-    assert np.allclose(std, np.sqrt(var))
+    assert np.allclose(std, np.sqrt(var), equal_nan=True)
 
 
 def test_all_nan_handling():
@@ -83,7 +85,7 @@ def test_single_point_influence():
     """Single point should influence neighbors."""
     data = np.full(100, np.nan)
     data[50] = 10.0
-    mean = dct_mean(data, width=10.0)
+    mean = dct_mean(data, width=10.0, restore_input_nan=False)
 
     # At index 50, mean should be exactly the value (normalized conv property)
     assert np.isclose(mean[50], 10.0)
@@ -257,11 +259,115 @@ def test_prefill_then_smooth_reduces_boundary_jump():
     data = truth + 0.2 * np.random.default_rng(0).standard_normal(x.size)
     data[110:170] = np.nan
 
-    direct = dct_mean(data, width=10.0)
+    direct = dct_mean(data, width=10.0, restore_input_nan=False)
     prefilled = dct_prefill(data, width=10.0, max_iter=5)
-    smooth_prefilled = dct_mean(prefilled, width=10.0)
+    smooth_prefilled = dct_mean(prefilled, width=10.0, restore_input_nan=False)
 
     # Compare discontinuity at gap edge (left boundary around index 109/110)
     jump_direct = abs(direct[109] - direct[110])
     jump_prefilled = abs(smooth_prefilled[109] - smooth_prefilled[110])
     assert jump_prefilled <= jump_direct
+
+
+def test_count_nonnegative_with_heavy_gaps():
+    """Effective count should remain nonnegative under heavy missingness."""
+    n_az, n_range = 180, 100
+    mask = np.zeros((n_az, n_range), dtype=bool)
+
+    # Keep sparse support in a few contiguous stripes.
+    mask[:, 20:24] = True
+    mask[60:120, 40:43] = True
+    mask[::6, :] = True
+
+    count = dct_count(
+        mask,
+        width=5.0,
+        coordinates="polar",
+        az_res_deg=360.0 / n_az,
+        az_boundary="periodic",
+    )
+    assert np.nanmin(count) >= 0.0
+
+
+def test_mean_stable_finite_heavy_gaps_polar():
+    """Mean should remain finite when sparse valid support exists."""
+    n_az, n_range = 180, 120
+    az = np.linspace(0, 2 * np.pi, n_az, endpoint=False)
+    rng = np.arange(1, n_range + 1, dtype=float)
+    AZ, R = np.meshgrid(az, rng, indexing="ij")
+    base = np.sin(2.0 * AZ) + 0.2 * np.cos(R / 8.0)
+
+    data = np.full((n_az, n_range), np.nan)
+    data[:, 10:14] = base[:, 10:14]
+    data[50:130, 40:44] = base[50:130, 40:44]
+    data[::7, :] = base[::7, :]
+
+    mean = dct_mean(
+        data,
+        width=5.0,
+        coordinates="polar",
+        restore_input_nan=False,
+        az_res_deg=360.0 / n_az,
+        az_boundary="periodic",
+    )
+    assert np.all(np.isfinite(mean))
+
+
+def test_mean_restore_input_nan_default_true():
+    """By default, dct_mean restores NaNs at original invalid inputs."""
+    data = np.array([1.0, np.nan, 3.0], dtype=float)
+    mean = dct_mean(data, width=2.0)
+    assert np.isnan(mean[1])
+    assert np.isfinite(mean[0]) and np.isfinite(mean[2])
+
+
+def test_variance_std_restore_input_nan_default_true():
+    """Variance/std should preserve NaNs at original invalid inputs by default."""
+    data = np.array([1.0, np.nan, 3.0], dtype=float)
+    var = dct_variance(data, width=2.0)
+    std = dct_std(data, width=2.0)
+    assert np.isnan(var[1]) and np.isnan(std[1])
+    assert np.isfinite(var[0]) and np.isfinite(var[2])
+    assert np.isfinite(std[0]) and np.isfinite(std[2])
+
+
+def test_count_restore_input_nan_default_true():
+    """Count should restore NaNs where input mask is False by default."""
+    mask = np.array([True, False, True, False], dtype=bool)
+    count = dct_count(mask, width=2.0)
+    assert np.isnan(count[1]) and np.isnan(count[3])
+    assert np.isfinite(count[0]) and np.isfinite(count[2])
+
+
+def test_variance_std_stable_finite_heavy_gaps_polar():
+    """Variance/std should remain finite and nonnegative with sparse support."""
+    n_az, n_range = 160, 90
+    az = np.linspace(0, 2 * np.pi, n_az, endpoint=False)
+    rng = np.arange(1, n_range + 1, dtype=float)
+    AZ, R = np.meshgrid(az, rng, indexing="ij")
+    base = np.sin(3.0 * AZ + R / 20.0)
+
+    data = np.full((n_az, n_range), np.nan)
+    data[:, 15:18] = base[:, 15:18]
+    data[::5, :] = base[::5, :]
+
+    var = dct_variance(
+        data,
+        width=5.0,
+        coordinates="polar",
+        restore_input_nan=False,
+        az_res_deg=360.0 / n_az,
+        az_boundary="periodic",
+    )
+    std = dct_std(
+        data,
+        width=5.0,
+        coordinates="polar",
+        restore_input_nan=False,
+        az_res_deg=360.0 / n_az,
+        az_boundary="periodic",
+    )
+
+    assert np.all(np.isfinite(var))
+    assert np.all(np.isfinite(std))
+    assert np.nanmin(var) >= 0.0
