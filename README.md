@@ -16,30 +16,23 @@ convolution/statistics surface.
 
 ## Installation
 
-### pip
-
-```bash
-pip install .
-```
-
-When the package is published on PyPI, installation will be:
+### pip (available now)
 
 ```bash
 pip install dct-toolkit
 ```
 
-### from source
+Or install from source:
 
 ```bash
 git clone <your-repo-url>
 cd dct_toolkit
-pip install .
+pip install -e .
 ```
 
-### conda (planned)
+### conda (pending conda-forge approval)
 
-Conda-forge packaging is in preparation. Until the feedstock is published, you can install with
-pip inside a conda environment.
+Conda-forge packaging has been submitted (PR under review). Until the feedstock is merged, install with pip inside a conda environment:
 
 ```bash
 conda create -n dct-toolkit python=3.11 -y
@@ -87,28 +80,36 @@ var = dct.dct_variance(data, width=10.0)
 std = dct.dct_std(data, width=10.0)
 ```
 
-## Public API (Top Level)
+## Quick Cheat Sheet
 
-- `dct_smooth`
-- `dct_count`
-- `dct_mean`
-- `dct_prefill`
-- `dct_variance`
-- `dct_std`
-- `smooth_cartesian`
-- `smooth_polar`
-- `get_dct_transfer_function`
-- `dct_convolve_1d`
+| Function | Description |
+|----------|-------------|
+| `get_dct_transfer_function` | Build 1D spectral kernel `H[k]` from width and kernel type. |
+| `dct_convolve_1d` | Apply one 1D DCT convolution along one axis using a precomputed `H`. |
+| `smooth_cartesian` | Low-level separable smoothing for N-D Cartesian arrays. |
+| `smooth_polar` | Low-level smoothing for 2D polar arrays with adaptive azimuth width. |
+| `dct_smooth` | Top-level "just smooth this" wrapper (auto-pre-fills NaNs, then restores NaN mask). |
+| `dct_mean` | NaN-robust local mean via normalized convolution. |
+| `dct_count` | Effective local sample count from a validity mask. |
+| `dct_prefill` | Iterative normalized-convolution gap fill (often used before full-field smoothing). |
+| `dct_variance` | NaN-robust local variance from normalized-convolution moments. |
+| `dct_std` | NaN-robust local standard deviation (`sqrt(dct_variance)`). |
 
-## Notes on Gap Filling
+## Pre-filling (`dct_prefill`)
 
-Gap-filling methods remain in the repository for internal research, but they are
-de-scoped from the top-level public API for the initial convolution/statistics release.
+`dct_prefill` provides an **iterative normalized-convolution gap fill** based on `dct_mean`:
+
+- Fills gaps (NaNs or a specified mask) using iterative local averaging.
+- Preserves non-target values exactly.
+- Intended as a **pre-processing step** before full-field smoothing.
+- `max_iter=3` by default for predictable runtime; `max_iter=None` runs until convergence.
+
+See the Quick Start section above for usage examples.
 
 ## Documentation
 
-- `docs/MATHEMATICAL_BASIS.md`
-- `docs/API_REFERENCE.md`
+- `docs/MATHEMATICAL_BASIS.md` — Mathematical foundations and theory
+- `docs/API_REFERENCE.md` — Complete API documentation
 
 ## License
 
