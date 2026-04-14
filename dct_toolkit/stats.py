@@ -256,7 +256,7 @@ def dct_prefill(
     width: float,
     coordinates: str = "cartesian",
     fill_mask: np.ndarray = None,
-    max_iter: Optional[int] = None,
+    max_iter: Optional[int] = 3,
     **kwargs,
 ) -> np.ndarray:
     """
@@ -277,7 +277,7 @@ def dct_prefill(
     fill_mask : np.ndarray, optional
         Boolean mask where True marks positions to fill/replace.
         If None, all NaN positions are filled.
-    max_iter : int or None, default=None
+    max_iter : int or None, default=3
         Maximum number of normalized-convolution iterations.
         If None, iterate until convergence or until a safety cap of 20
         iterations is reached.

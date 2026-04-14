@@ -35,7 +35,7 @@ def dct_smooth(
     data: np.ndarray,
     width: float,
     coordinates: str = "cartesian",
-    prefill_max_iter: Optional[int] = None,
+    prefill_max_iter: Optional[int] = 3,
     **kwargs: Any,
 ) -> np.ndarray:
     """
@@ -49,10 +49,10 @@ def dct_smooth(
         Smoothing width.
     coordinates : str, default='cartesian'
         'cartesian' or 'polar'.
-    prefill_max_iter : int or None, default=None
+    prefill_max_iter : int or None, default=3
         Number of normalized-convolution prefill iterations used when input
-        contains NaNs. If None, prefill iterates until convergence or a safety
-        cap of 20 iterations.
+        contains NaNs. If None, prefill iterates until convergence or a
+        safety cap of 20 iterations.
     **kwargs
         Additional arguments (kernel_type, az_res_deg, etc.)
 

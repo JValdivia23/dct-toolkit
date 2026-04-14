@@ -179,6 +179,13 @@ def test_prefill_max_iter_none_converges_or_caps():
     assert np.all(np.isfinite(filled))
 
 
+def test_prefill_default_max_iter_runs():
+    """Default prefill path should remain finite for simple gaps."""
+    data = np.array([1.0, np.nan, 3.0], dtype=float)
+    filled = dct_prefill(data, width=2.0)
+    assert np.all(np.isfinite(filled))
+
+
 def test_prefill_residual_nearest_1d():
     """Residual nearest fill should replace unresolved 1D targets."""
     data = np.array([np.nan, 1.0, np.nan, np.nan, 3.0, np.nan], dtype=float)

@@ -14,10 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `dct_smooth` now enforces a NaN-safe smoothing pipeline: if NaNs are present, it
   automatically pre-fills missing values before spectral smoothing and restores the
   original NaN mask afterward.
-- `dct_prefill` now defaults to `max_iter=None` (iterate until convergence or safety
-  cap of 20), stops early when no NaNs remain, and applies mandatory nearest-neighbor
-  residual fill for unresolved targets to guarantee finite arrays for downstream
-  spectral smoothing.
+- `dct_prefill` now applies mandatory nearest-neighbor residual fill for unresolved
+  targets, guaranteeing finite arrays for downstream spectral smoothing when support
+  exists.
+- Default prefill iteration count is now `max_iter=3` for predictable runtime. You can
+  still set `max_iter=None` to iterate until convergence (safety cap: 20).
 
 ### Added
 - Added NaN-policy regression tests for `dct_smooth` and new `dct_prefill` iteration/

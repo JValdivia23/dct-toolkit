@@ -25,7 +25,7 @@ Apply 1D convolution using DCT-II (`norm='ortho'`).
 
 ## High-Level Smoothing
 
-### `dct_toolkit.dct_smooth(data, width, coordinates='cartesian', prefill_max_iter=None, **kwargs)`
+### `dct_toolkit.dct_smooth(data, width, coordinates='cartesian', prefill_max_iter=3, **kwargs)`
 Top-level convenience wrapper for Cartesian and polar smoothing.
 
 - `coordinates='cartesian'`: calls `smooth_cartesian(data, width, **kwargs)`.
@@ -33,6 +33,7 @@ Top-level convenience wrapper for Cartesian and polar smoothing.
 - Default kernel is `'gaussian'` unless `kernel_type` is explicitly provided.
 - If input contains NaNs, smoothing automatically runs a NaN-safe prefill step,
   applies spectral smoothing on the finite field, then restores the original NaN mask.
+- `prefill_max_iter=3` by default for predictable runtime.
 - `prefill_max_iter=None` means iterate prefill until convergence (or safety cap of 20).
 - Legacy alias: passing `max_iter=...` in kwargs is mapped to `prefill_max_iter`.
 
@@ -73,13 +74,14 @@ Compute robust local mean:
 - Returns floating-point output.
 - If `mask` is provided, it must match `data.shape`.
 
-#### `dct_prefill(data, width, coordinates='cartesian', fill_mask=None, max_iter=None, **kwargs)`
+#### `dct_prefill(data, width, coordinates='cartesian', fill_mask=None, max_iter=3, **kwargs)`
 Fill gaps using iterative normalized convolution based on `dct_mean`.
 
 - `fill_mask` uses `True = fill this position`.
 - If `fill_mask` is None, NaN positions are filled.
 - Preserves non-target values exactly.
 - Intended as a pre-processing step before full-field smoothing.
+- `max_iter=3` by default for predictable runtime.
 - `max_iter=None` runs until convergence with safety cap `20`; fixed integer values
   stop early once no NaNs remain.
 - Any unresolved targets after iterations are filled with nearest-neighbor fallback
