@@ -76,7 +76,7 @@ Compute effective local sample count.
 - Density is clipped to `[0, 1]` to keep counts physically valid.
 - `restore_input_nan=True` by default masks output where input `mask` is False.
 
-#### `dct_mean(data, width, coordinates='cartesian', mask=None, **kwargs)`
+#### `dct_mean(data, width, coordinates='cartesian', mask=None, min_effective_density=None, **kwargs)`
 Compute robust local mean:
 
 `mu = smooth(data * mask) / smooth(mask)`
@@ -88,8 +88,14 @@ Compute robust local mean:
   keep results finite and stable when support exists. The denominator threshold
   is `1e-3` (internal constant `_MEAN_DENOMINATOR_FLOOR`).
 - `restore_input_nan=True` by default masks output where input support is invalid.
+- `min_effective_density=None` (default) keeps the legacy behavior. When set
+  (e.g. `0.35`), the final output is set to NaN wherever the local
+  valid-sample density `smooth(mask)` is below this threshold. The threshold
+  is dimensionless (in `[0, 1]`) and works uniformly for Cartesian and polar
+  coordinates. This is the same density signal that `dct_count / area`
+  represents internally.
 
-#### `dct_prefill(data, width, coordinates='cartesian', fill_mask=None, max_iter=3, **kwargs)`
+#### `dct_prefill(data, width, coordinates='cartesian', fill_mask=None, max_iter=3, min_effective_density=0.35, **kwargs)`
 Fill gaps using iterative normalized convolution based on `dct_mean`.
 
 - `width` (`float` or sequence): Scalar = isotropic, sequence = anisotropic.
@@ -102,6 +108,13 @@ Fill gaps using iterative normalized convolution based on `dct_mean`.
   stop early once no NaNs remain.
 - Any unresolved targets after iterations are filled with nearest-neighbor fallback
   to guarantee finite outputs when at least one finite value exists.
+- `min_effective_density=0.35` (default) gates per-iteration mean estimates by
+  the local valid-sample density `smooth(mask)`. Cells whose local density is
+  below the threshold are left as NaN for that iteration and may be filled in
+  a later iteration as the valid mask grows. This stabilizes the iterative
+  prefill in low-support regions and uses the same density signal as
+  `dct_count / area`. Set to `None` or a non-positive value to disable the
+  gate and reproduce the legacy un-gated behavior.
 
 #### `dct_variance(data, width, coordinates='cartesian', mask=None, **kwargs)`
 Compute robust local variance:

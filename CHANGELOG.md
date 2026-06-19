@@ -14,10 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `(width_azimuth, width_range)`.
   - `dct_count` now uses anisotropic window area (`prod(widths)` in Cartesian,
     `width_range * width_azimuth/(r*dtheta)` in polar).
+- `dct_prefill` now gates per-iteration mean estimates by the local valid-sample
+  density (`smooth(mask)`) with `min_effective_density=0.35` by default. This
+  stabilizes iterative gap-filling in low-support regions and uses the same
+  density signal that `dct_count / area` represents internally. The gate is
+  applied uniformly across Cartesian and polar coordinates and can be disabled
+  by passing `min_effective_density=None`.
 
 ### Added
 - Added parity and artifact-regression tests for scalar-vs-vector isotropic widths,
   plus anisotropic Cartesian/polar smoke coverage.
+- Added `min_effective_density` keyword argument to `dct_prefill` (default
+  `0.35`) and `dct_mean` (default `None`, opt-in) for count-based stability
+  gating. When set, `dct_mean` returns NaN wherever the local valid-sample
+  density is below the threshold. New tests in `tests/test_stats.py` cover
+  the default, the disabled, the custom threshold, and the polar-coordinates
+  paths.
 
 ## [0.5.0] - 2026-04-14
 

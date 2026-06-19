@@ -471,3 +471,217 @@ def test_prefill_accepts_anisotropic_width_cartesian():
         data, width=[3.0, 2.0, 1.5], coordinates="cartesian", max_iter=3
     )
     assert np.all(np.isfinite(filled))
+
+
+def test_prefill_min_effective_density_default_gates_low_support():
+    """Default 0.35 density gate should refuse to fill cells with very low support.
+
+    With a width-10 kernel and only 1 valid cell every 100 positions, the
+    smoothed-mask density is well below 0.35 even near the valid samples,
+    so the per-iteration gate keeps cells as NaN.
+    """
+    n = 500
+    data = np.sin(np.linspace(0, 4 * np.pi, n))
+    data[:] = np.nan
+    data[::100] = data[::100]  # one valid point every 100
+
+    filled = dct_prefill(data, width=10.0, max_iter=5)
+
+    not_target = np.ones(n, dtype=bool)
+    not_target[::100] = False  # original valid points are not fill targets
+    fillable_nan = filled[not_target]
+    assert np.all(np.isnan(fillable_nan))
+
+
+def test_prefill_min_effective_density_none_disables_gate():
+    """min_effective_density=None should reproduce the legacy un-gated behavior."""
+    data = np.sin(np.linspace(0, 4 * np.pi, 200))
+    data[80:120] = np.nan
+
+    filled = dct_prefill(
+        data, width=10.0, max_iter=5, min_effective_density=None
+    )
+    assert np.all(np.isfinite(filled[80:120]))
+
+
+def test_prefill_min_effective_density_custom_value():
+    """A stricter threshold should defer more cells to the nearest-neighbor fallback.
+
+    The iterative normalized-convolution fill produces a smooth interpolation
+    across the gap, while the nearest-neighbor fallback (used for unresolved
+    cells) propagates the nearest valid value, creating a step. With a higher
+    threshold, more cells are deferred to the fallback, so the gap contains
+    piecewise-constant segments (one value per nearest-neighbor propagation
+    direction). With a lower threshold, the gap is dominated by the smooth
+    iterative fill.
+    """
+    n = 200
+    data = np.linspace(0.0, 1.0, n)
+    data[80:120] = np.nan
+
+    filled_low = dct_prefill(
+        data, width=10.0, max_iter=3, min_effective_density=0.05
+    )
+    filled_high = dct_prefill(
+        data, width=10.0, max_iter=3, min_effective_density=0.9
+    )
+
+    # Both should be fully finite (fallback fills the rest).
+    assert np.all(np.isfinite(filled_low[80:120]))
+    assert np.all(np.isfinite(filled_high[80:120]))
+
+    # The high-threshold fill relies more on the nearest-neighbor fallback,
+    # which propagates a single value from the nearest valid neighbor. So the
+    # filled gap contains long runs of identical values, whereas the
+    # low-threshold fill interpolates smoothly. Compare the maximum run
+    # length of identical values inside the gap.
+    def _max_run_length(arr):
+        runs = []
+        current = 1
+        for i in range(1, len(arr)):
+            if arr[i] == arr[i - 1]:
+                current += 1
+            else:
+                runs.append(current)
+                current = 1
+        runs.append(current)
+        return max(runs) if runs else 0
+
+    run_low = _max_run_length(filled_low[80:120])
+    run_high = _max_run_length(filled_high[80:120])
+    # The high-threshold fill should have a longer run of identical values
+    # (larger fallback region) than the low-threshold fill.
+    assert run_high >= run_low
+
+
+def test_mean_min_effective_density_returns_nan():
+    """dct_mean with min_effective_density set should return NaN in low-density zones."""
+    data = np.full(200, np.nan)
+    # Use a cluster of valid points to get density > 0.35 at the center.
+    data[95:106] = 5.0
+
+    mean = dct_mean(
+        data,
+        width=8.0,
+        restore_input_nan=False,
+        min_effective_density=0.35,
+    )
+
+    # Far from the valid cluster, density < 0.35 => NaN.
+    assert np.isnan(mean[0])
+    assert np.isnan(mean[20])
+    # Within the valid cluster, density is well above 0.35.
+    assert np.isfinite(mean[100])
+    assert np.isfinite(mean[102])
+
+
+def test_mean_min_effective_density_none_unchanged():
+    """dct_mean with min_effective_density=None should match legacy behavior."""
+    data = np.full(200, np.nan)
+    data[100] = 5.0
+
+    mean_none = dct_mean(data, width=8.0, restore_input_nan=False, min_effective_density=None)
+    mean_default = dct_mean(data, width=8.0, restore_input_nan=False)
+
+    assert np.allclose(mean_none, mean_default, equal_nan=True)
+
+
+def test_prefill_min_effective_density_consistent_with_dct_count():
+    """Gate should accept cells in the un-gated path that the gated path skips."""
+    np.random.seed(0)
+    n = 400
+    data = np.linspace(0.0, 1.0, n)
+    mask = np.zeros(n, dtype=bool)
+    mask[::20] = True
+    data[~mask] = np.nan
+
+    width = 6.0
+    threshold = 0.35
+    count = dct_count(mask, width=width, restore_input_nan=False)
+    width_norm = float(np.prod(np.atleast_1d(width)))
+    density = count / width_norm
+
+    filled_gated = dct_prefill(
+        data,
+        width=width,
+        max_iter=4,
+        min_effective_density=threshold,
+    )
+    filled_ungated = dct_prefill(
+        data,
+        width=width,
+        max_iter=4,
+        min_effective_density=None,
+    )
+
+    target = np.isnan(data)
+    n_filled_gated = int(np.sum(target & np.isfinite(filled_gated)))
+    n_filled_ungated = int(np.sum(target & np.isfinite(filled_ungated)))
+
+    # The gate must accept no more cells than the un-gated path.
+    assert n_filled_gated <= n_filled_ungated
+
+    # In the un-gated path, cells near the original valid points (high
+    # original-mask density) should be filled.
+    near_valid = target & (density > 0.5)
+    if np.any(near_valid):
+        assert np.all(np.isfinite(filled_ungated[near_valid]))
+
+    # Consistency with dct_count: cells that the gate skips should have
+    # original-mask density below the threshold (so the gate is justified
+    # in leaving them NaN at this iteration).
+    gated_skipped = target & np.isnan(filled_gated) & np.isfinite(filled_ungated)
+    if np.any(gated_skipped):
+        # Some skipped cells may have been filled by the nearest-neighbor
+        # fallback, so we only check the bulk of the gap region.
+        center_skipped = gated_skipped[100:300]
+        if np.any(center_skipped):
+            assert np.all(density[100:300][center_skipped] <= threshold)
+
+
+def test_mean_min_effective_density_polar_heavy_gaps():
+    """dct_mean gate should work in polar coords and respect the threshold."""
+    n_az, n_range = 180, 120
+    az = np.linspace(0, 2 * np.pi, n_az, endpoint=False)
+    rng = np.arange(1, n_range + 1, dtype=float)
+    AZ, R = np.meshgrid(az, rng, indexing="ij")
+    base = np.sin(2.0 * AZ) + 0.2 * np.cos(R / 8.0)
+
+    # Use dense support regions (so density > 0.35) to test the gate.
+    data = np.full((n_az, n_range), np.nan)
+    data[:, 10:30] = base[:, 10:30]      # 20-cell radial stripe (dense)
+    data[20:160, 40:60] = base[20:160, 40:60]  # 140x20 angular-range patch
+
+    mean = dct_mean(
+        data,
+        width=5.0,
+        coordinates="polar",
+        restore_input_nan=False,
+        az_res_deg=360.0 / n_az,
+        az_boundary="periodic",
+        min_effective_density=0.35,
+    )
+
+    valid = np.isfinite(data)
+    assert np.all(np.isfinite(mean[valid]))
+
+    mask = np.isfinite(data)
+    count = dct_count(
+        mask,
+        width=5.0,
+        coordinates="polar",
+        az_res_deg=360.0 / n_az,
+        az_boundary="periodic",
+        restore_input_nan=False,
+    )
+    widths = np.array([5.0, 5.0], dtype=float)
+    r_indices = np.arange(1, n_range + 1)
+    az_res_rad = np.deg2rad(360.0 / n_az)
+    w_beams = float(widths[0]) / (r_indices * az_res_rad)
+    area_1d = float(widths[1]) * w_beams
+    area = np.tile(area_1d, (n_az, 1))
+    density = count / area
+
+    below_gate = density < 0.35
+    assert np.all(np.isnan(mean[below_gate]))
+    assert np.all(np.isfinite(mean[~below_gate]))

@@ -18,6 +18,7 @@ from .polar import smooth_polar
 
 _PREFILL_MAX_ITER_CAP = 20
 _MEAN_DENOMINATOR_FLOOR = 1e-3
+DEFAULT_MIN_EFFECTIVE_DENSITY = 0.35
 
 
 def _normalize_width_for_coordinates(
@@ -241,6 +242,7 @@ def dct_mean(
     coordinates: str = "cartesian",
     mask: np.ndarray = None,
     restore_input_nan: bool = True,
+    min_effective_density: Optional[float] = None,
     **kwargs,
 ) -> np.ndarray:
     """
@@ -262,6 +264,13 @@ def dct_mean(
         Valid data mask. If None, inferred from ~isnan(data).
     restore_input_nan : bool, default=True
         If True, output is set to NaN where input support is invalid.
+    min_effective_density : float or None, optional
+        If not None, the final output is set to NaN wherever the local
+        valid-sample density (``smooth(mask)``, in [0, 1]) is below this
+        threshold. This is the dimensionless form of the minimum effective
+        sample count used by ``dct_count / area``. ``None`` (default) keeps
+        the legacy behavior with only the internal ``_MEAN_DENOMINATOR_FLOOR``
+        gating.
 
     Returns
     -------
@@ -273,6 +282,9 @@ def dct_mean(
     For poorly conditioned support regions (near-zero or negative smoothed
     mask values), this function falls back to a prefill-and-smooth estimate
     at affected points to keep outputs finite and stable when support exists.
+    The ``min_effective_density`` gate is applied **after** that fallback, so
+    locations where the prefill produces a value below the density threshold
+    are still returned as NaN.
     """
     stable_fallback = bool(kwargs.pop("_stable_fallback", True))
     prefill_max_iter = kwargs.pop("_prefill_max_iter", 3)
@@ -331,6 +343,14 @@ def dct_mean(
         fallback = _smooth_with_coordinates(prefilled, width, coordinates, **kwargs)
         mean[invalid_den] = fallback[invalid_den]
 
+    # 5. Optional density-based gate (min_effective_density).
+    #    Applied after the stable-fallback so that any value that survives
+    #    the fallback is still discarded if the local support is too sparse.
+    if min_effective_density is not None and float(min_effective_density) > 0:
+        below_threshold = denominator < float(min_effective_density)
+        if np.any(below_threshold):
+            mean[below_threshold] = np.nan
+
     if restore_input_nan:
         mean[~valid_data] = np.nan
 
@@ -343,6 +363,7 @@ def dct_prefill(
     coordinates: str = "cartesian",
     fill_mask: np.ndarray = None,
     max_iter: Optional[int] = 3,
+    min_effective_density: float = DEFAULT_MIN_EFFECTIVE_DENSITY,
     **kwargs,
 ) -> np.ndarray:
     """
@@ -370,6 +391,16 @@ def dct_prefill(
         Maximum number of normalized-convolution iterations.
         If None, iterate until convergence or until a safety cap of 20
         iterations is reached.
+    min_effective_density : float, default=0.35
+        Minimum local valid-sample density (in [0, 1]) required to accept a
+        per-iteration mean estimate. The density is the same
+        ``smooth(mask)`` signal used internally by ``dct_count`` (i.e.
+        ``dct_count / area``), so the threshold is dimensionless and works
+        uniformly across Cartesian and polar coordinates. Cells whose local
+        density is below the threshold are left as NaN for that iteration
+        and may be filled in a later iteration as the valid mask grows.
+        Set to ``None`` or a non-positive value to disable the gate and
+        reproduce the legacy un-gated behavior.
     **kwargs
         Additional keyword arguments passed to ``dct_mean``
         (e.g. ``az_res_deg``, ``az_boundary``, ``kernel_type``).
@@ -389,12 +420,18 @@ def dct_prefill(
     - After iterative normalized-convolution filling, any remaining target NaNs
       are filled by nearest-neighbor propagation to guarantee finite output when
       at least one finite value exists.
+    - The ``min_effective_density`` gate is also passed to the internal
+      ``dct_mean`` call so the per-iteration mean statistic is consistently
+      gated by the same criterion.
     """
     data_array = np.asarray(data)
     _normalize_width_for_coordinates(width, coordinates, data_array.ndim)
 
     if max_iter is not None and max_iter < 1:
         raise ValueError(f"max_iter must be >= 1 or None, got {max_iter}")
+
+    gate_enabled = min_effective_density is not None and float(min_effective_density) > 0
+    gate_threshold = float(min_effective_density) if gate_enabled else None
 
     out_dtype = np.result_type(data_array.dtype, np.float64)
     original = data_array.astype(out_dtype, copy=True)
@@ -419,6 +456,14 @@ def dct_prefill(
     mean_kwargs = dict(kwargs)
     mean_kwargs.setdefault("kernel_type", "gaussian")
     mean_kwargs["_stable_fallback"] = False
+    if gate_enabled:
+        mean_kwargs["min_effective_density"] = gate_threshold
+
+    # Smoothing kwargs for raw density computation: drop private dct_mean args
+    # (e.g. _stable_fallback, _prefill_max_iter, _denominator_floor) that are
+    # valid for dct_mean but not for the underlying smooth_cartesian /
+    # smooth_polar calls.
+    smooth_kwargs = {k: v for k, v in kwargs.items() if not k.startswith("_")}
 
     max_iter_eff = _PREFILL_MAX_ITER_CAP if max_iter is None else int(max_iter)
 
@@ -439,7 +484,15 @@ def dct_prefill(
             restore_input_nan=False,
             **mean_kwargs,
         )
-        newly_filled = candidates & np.isfinite(estimate)
+        if gate_enabled:
+            density = _smooth_with_coordinates(
+                valid_current.astype(out_dtype), width, coordinates, **smooth_kwargs
+            )
+            density = np.clip(density, 0.0, 1.0)
+            density_ok = density > gate_threshold
+        else:
+            density_ok = np.ones(out.shape, dtype=bool)
+        newly_filled = candidates & np.isfinite(estimate) & density_ok
         if not np.any(newly_filled):
             break
 
