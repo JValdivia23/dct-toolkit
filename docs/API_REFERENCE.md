@@ -31,6 +31,10 @@ Top-level convenience wrapper for Cartesian and polar smoothing.
 - `coordinates='cartesian'`: calls `smooth_cartesian(data, width, **kwargs)`.
 - `coordinates='polar'`: calls `smooth_polar(data, width_pixels=width, **kwargs)`.
 - Default kernel is `'gaussian'` unless `kernel_type` is explicitly provided.
+- For Cartesian data, `kernel_type` accepts a string or a sequence with one
+  supported kernel name per array axis, as documented for `smooth_cartesian`.
+  The same kernels are used in prefill and final smoothing. Polar data accepts
+  a single kernel string.
 - If input contains NaNs, smoothing automatically runs a NaN-safe prefill step,
   applies spectral smoothing on the finite field, then restores the original NaN mask.
 - `prefill_max_iter=3` by default for predictable runtime.
@@ -43,8 +47,41 @@ Top-level convenience wrapper for Cartesian and polar smoothing.
 Apply separable DCT smoothing to N-D Cartesian data.
 
 - `data` (`np.ndarray`): Any-dimensional array.
-- `width` (`float` or sequence): Scalar = isotropic. Sequence length must be `data.ndim`.
-- `kernel_type` (str): `'boxcar'`, `'boxcar_discrete'`, `'gaussian'`.
+- `width` (`float` or sequence): A scalar applies the same width to every axis.
+  A sequence must have length `data.ndim` and follows array axis order.
+  Values must be finite and positive, in grid cells along the corresponding axis.
+  Gaussian widths use `sigma = width / sqrt(12)`; boxcar widths are full widths.
+  `'boxcar_discrete'` rounds width to an integer, clamps it to at least 1, and
+  increments even values to obtain an odd window size.
+- `kernel_type` (`str` or sequence of `str`): `'boxcar'`, `'boxcar_discrete'`,
+  or `'gaussian'`. A string selects the same kernel for every axis. A 1-D list,
+  tuple, or NumPy array must have length `data.ndim` and selects one kernel per
+  axis, independently of whether `width` is scalar or a sequence.
+- Invalid kernel sequence length, dimensionality, non-string entries, or unknown
+  kernel names raise `ValueError`. Errors for invalid entries identify the axis.
+- Boundaries are reflective on every axis. Mixed kernels retain a single N-D
+  forward/inverse DCT pair. Equal widths with different kernel types can still
+  produce anisotropic smoothing.
+- Input should be finite. Use `dct_mean` for normalized convolution with gaps,
+  or `dct_smooth` for automatic prefill followed by smoothing.
+
+For data in **(z, y, x)** order:
+
+```python
+import numpy as np
+from dct_toolkit import smooth_cartesian
+
+volume = np.random.default_rng(42).standard_normal((16, 32, 32))
+smoothed = smooth_cartesian(
+    volume,
+    width=(3.0, 5.0, 5.0),
+    kernel_type=("gaussian", "boxcar", "boxcar"),
+)
+```
+
+If the volume is stored in `(x, y, z)` order, the corresponding sequences are
+`width=(5.0, 5.0, 3.0)` and `kernel_type=("boxcar", "boxcar", "gaussian")`.
+Physical widths must first be divided by the grid spacing along each axis.
 
 ### `dct_toolkit.polar`
 
@@ -56,6 +93,8 @@ Apply smoothing to 2D polar data (`n_azimuth`, `n_range`) with adaptive azimuth 
 - `az_boundary='reflective'`: DCT-based reflective boundary.
 - `az_boundary='periodic'`: real FFT periodic boundary (0/360 wrap).
 - `range_boundary`: currently `'reflective'`.
+- `kernel_type` is a single string; per-axis kernel sequences are supported
+  only for Cartesian coordinates.
 
 ---
 
@@ -65,6 +104,19 @@ Apply smoothing to 2D polar data (`n_azimuth`, `n_range`) with adaptive azimuth 
 
 All statistical functions use normalized convolution and support NaN-containing inputs.
 
+For Cartesian coordinates, all functions below accept `kernel_type` through
+`**kwargs` as a single string or a length-`data.ndim` sequence (`mask.ndim` for
+`dct_count`), using the same axis order and width conventions as
+`smooth_cartesian`. This includes `dct_prefill`. The default is `'gaussian'`.
+For polar coordinates, `kernel_type` remains a single string.
+
+Mixed-kernel means apply the complete separable kernel to both the zero-filled
+data and validity mask before dividing. Variance uses that same kernel for both
+moments; prefill and density thresholds also use the requested kernels.
+`dct_count` retains the convention `clip(smooth(mask), 0, 1) * prod(widths)` for
+Cartesian data; this is an effective window count, including for Gaussian or
+mixed kernels, rather than a literal number of neighbors in a finite kernel.
+
 For heavily gapped fields, statistical functions include internal stability
 fallbacks to avoid unstable normalized-convolution ratios in poorly supported
 regions.
@@ -72,7 +124,7 @@ regions.
 #### `dct_count(mask, width, coordinates='cartesian', **kwargs)`
 Compute effective local sample count.
 
-- `width` (`float` or sequence): Scalar = isotropic, sequence = anisotropic.
+- `width` (`float` or sequence): Scalar = equal widths, sequence = per-axis widths.
 - Density is clipped to `[0, 1]` to keep counts physically valid.
 - `restore_input_nan=True` by default masks output where input `mask` is False.
 
@@ -82,7 +134,7 @@ Compute robust local mean:
 `mu = smooth(data * mask) / smooth(mask)`
 
 - Returns floating-point output.
-- `width` (`float` or sequence): Scalar = isotropic, sequence = anisotropic.
+- `width` (`float` or sequence): Scalar = equal widths, sequence = per-axis widths.
 - If `mask` is provided, it must match `data.shape`.
 - In low-support regions, an internal prefill-and-smooth fallback is used to
   keep results finite and stable when support exists. The denominator threshold
@@ -98,7 +150,7 @@ Compute robust local mean:
 #### `dct_prefill(data, width, coordinates='cartesian', fill_mask=None, max_iter=3, min_effective_density=0.35, **kwargs)`
 Fill gaps using iterative normalized convolution based on `dct_mean`.
 
-- `width` (`float` or sequence): Scalar = isotropic, sequence = anisotropic.
+- `width` (`float` or sequence): Scalar = equal widths, sequence = per-axis widths.
 - `fill_mask` uses `True = fill this position`.
 - If `fill_mask` is None, NaN positions are filled.
 - Preserves non-target values exactly.
@@ -122,7 +174,7 @@ Compute robust local variance:
 `Var = E[X^2] - (E[X])^2`
 
 - `restore_input_nan=True` by default masks output where input support is invalid.
-- `width` (`float` or sequence): Scalar = isotropic, sequence = anisotropic.
+- `width` (`float` or sequence): Scalar = equal widths, sequence = per-axis widths.
 
 #### `dct_std(data, width, coordinates='cartesian', mask=None, **kwargs)`
 Compute robust local standard deviation:
@@ -130,7 +182,7 @@ Compute robust local standard deviation:
 `Std = sqrt(Var)`
 
 - `restore_input_nan=True` by default masks output where input support is invalid.
-- `width` (`float` or sequence): Scalar = isotropic, sequence = anisotropic.
+- `width` (`float` or sequence): Scalar = equal widths, sequence = per-axis widths.
 
 ---
 

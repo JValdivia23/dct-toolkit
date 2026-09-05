@@ -6,7 +6,7 @@ using Normalized Convolution. This approach naturally handles gaps (NaNs)
 without requiring explicit pre-filling.
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import scipy.ndimage
@@ -169,7 +169,7 @@ def dct_count(
     width: WidthLike,
     coordinates: str = "cartesian",
     restore_input_nan: bool = True,
-    **kwargs,
+    **kwargs: Any,
 ) -> np.ndarray:
     """
     Compute effective sample count (local density * window area).
@@ -179,15 +179,18 @@ def dct_count(
     mask : np.ndarray
         Boolean or binary mask (1=valid, 0=invalid).
     width : float or sequence of float
-        Smoothing width. Scalar input is isotropic. Sequence input is
-        anisotropic and must match dimensionality (Cartesian) or follow
-        ``(width_azimuth, width_range)`` for polar.
+        Smoothing width. A scalar applies the same width to every axis.
+        A sequence follows array axis order and must match dimensionality
+        (Cartesian), or follow ``(width_azimuth, width_range)`` for polar.
     coordinates : str
         'cartesian' or 'polar'.
     restore_input_nan : bool, default=True
         If True, output is set to NaN where ``mask`` is False.
     **kwargs
         Additional arguments passed to smoothing function (e.g. az_res_deg).
+        For Cartesian data, ``kernel_type`` accepts a string or one kernel
+        name per axis; polar data requires a single string. See
+        ``smooth_cartesian`` for kernel names and width conventions.
 
     Returns
     -------
@@ -243,7 +246,7 @@ def dct_mean(
     mask: np.ndarray = None,
     restore_input_nan: bool = True,
     min_effective_density: Optional[float] = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> np.ndarray:
     """
     Compute robust local mean using Normalized Convolution.
@@ -255,9 +258,9 @@ def dct_mean(
     data : np.ndarray
         Input data (can contain NaNs).
     width : float or sequence of float
-        Smoothing width. Scalar input is isotropic. Sequence input is
-        anisotropic and must match dimensionality (Cartesian) or follow
-        ``(width_azimuth, width_range)`` for polar.
+        Smoothing width. A scalar applies the same width to every axis.
+        A sequence follows array axis order and must match dimensionality
+        (Cartesian), or follow ``(width_azimuth, width_range)`` for polar.
     coordinates : str
         'cartesian' or 'polar'.
     mask : np.ndarray, optional
@@ -271,6 +274,12 @@ def dct_mean(
         sample count used by ``dct_count / area``. ``None`` (default) keeps
         the legacy behavior with only the internal ``_MEAN_DENOMINATOR_FLOOR``
         gating.
+    **kwargs
+        Additional arguments passed to smoothing. For Cartesian data,
+        ``kernel_type`` accepts a string or one kernel name per axis;
+        polar data requires a single string. The same combined kernel
+        smooths both data and mask. See ``smooth_cartesian`` for kernel
+        names and width conventions.
 
     Returns
     -------
@@ -364,7 +373,7 @@ def dct_prefill(
     fill_mask: np.ndarray = None,
     max_iter: Optional[int] = 3,
     min_effective_density: float = DEFAULT_MIN_EFFECTIVE_DENSITY,
-    **kwargs,
+    **kwargs: Any,
 ) -> np.ndarray:
     """
     Fill gaps using iterative normalized convolution.
@@ -378,9 +387,9 @@ def dct_prefill(
     data : np.ndarray
         Input data array. NaN values indicate gaps when ``fill_mask`` is None.
     width : float or sequence of float
-        Smoothing width used by normalized convolution. Scalar input is
-        isotropic. Sequence input is anisotropic and must match
-        dimensionality (Cartesian) or follow
+        Smoothing width used by normalized convolution. A scalar applies
+        the same width to every axis. A sequence follows array axis order
+        and must match dimensionality (Cartesian), or follow
         ``(width_azimuth, width_range)`` for polar. All values must be > 0.
     coordinates : str, default='cartesian'
         Coordinate mode for smoothing: ``'cartesian'`` or ``'polar'``.
@@ -404,6 +413,9 @@ def dct_prefill(
     **kwargs
         Additional keyword arguments passed to ``dct_mean``
         (e.g. ``az_res_deg``, ``az_boundary``, ``kernel_type``).
+        For Cartesian data, ``kernel_type`` accepts a string or one kernel
+        name per axis; polar data requires a single string. See
+        ``smooth_cartesian`` for kernel names and width conventions.
         If ``kernel_type`` is not provided, ``'gaussian'`` is used to keep
         prefill behavior stable in low-support regions.
 
@@ -516,7 +528,7 @@ def dct_variance(
     coordinates: str = "cartesian",
     mask: np.ndarray = None,
     restore_input_nan: bool = True,
-    **kwargs,
+    **kwargs: Any,
 ) -> np.ndarray:
     """
     Compute robust local variance.
@@ -529,13 +541,26 @@ def dct_variance(
     data : np.ndarray
         Input data.
     width : float or sequence of float
-        Smoothing width. Scalar input is isotropic. Sequence input is
-        anisotropic and must match dimensionality (Cartesian) or follow
-        ``(width_azimuth, width_range)`` for polar.
+        Smoothing width. A scalar applies the same width to every axis.
+        A sequence follows array axis order and must match dimensionality
+        (Cartesian), or follow ``(width_azimuth, width_range)`` for polar.
+    coordinates : str, default='cartesian'
+        'cartesian' or 'polar'.
+    mask : np.ndarray, optional
+        Boolean validity mask with the same shape as ``data``. If None,
+        inferred from finite input values.
+    restore_input_nan : bool, default=True
+        If True, output is set to NaN where input support is invalid.
+    **kwargs
+        Additional arguments passed to ``dct_mean`` for both moments.
+        For Cartesian data, ``kernel_type`` accepts a string or one kernel
+        name per axis; polar data requires a single string. See
+        ``smooth_cartesian`` for kernel names and width conventions.
 
     Returns
     -------
     variance : np.ndarray
+        Local variance (floating-point array).
     """
     data_array = np.asarray(data)
     _normalize_width_for_coordinates(width, coordinates, data_array.ndim)
@@ -588,9 +613,37 @@ def dct_std(
     coordinates: str = "cartesian",
     mask: np.ndarray = None,
     restore_input_nan: bool = True,
-    **kwargs,
+    **kwargs: Any,
 ) -> np.ndarray:
-    """Compute robust local standard deviation."""
+    """
+    Compute robust local standard deviation.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Input data (can contain NaNs).
+    width : float or sequence of float
+        Smoothing width. A scalar applies the same width to every axis.
+        A sequence follows array axis order and must match dimensionality
+        (Cartesian), or follow ``(width_azimuth, width_range)`` for polar.
+    coordinates : str, default='cartesian'
+        'cartesian' or 'polar'.
+    mask : np.ndarray, optional
+        Boolean validity mask with the same shape as ``data``. If None,
+        inferred from finite input values.
+    restore_input_nan : bool, default=True
+        If True, output is set to NaN where input support is invalid.
+    **kwargs
+        Additional arguments passed to ``dct_variance``. For Cartesian data,
+        ``kernel_type`` accepts a string or one kernel name per axis;
+        polar data requires a single string. See ``smooth_cartesian``
+        for kernel names and width conventions.
+
+    Returns
+    -------
+    std : np.ndarray
+        Local standard deviation (square root of the local variance).
+    """
     data_array = np.asarray(data)
     _normalize_width_for_coordinates(width, coordinates, data_array.ndim)
 

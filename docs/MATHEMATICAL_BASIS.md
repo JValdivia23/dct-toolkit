@@ -24,6 +24,41 @@ $$ H[k] = \exp\left(-\frac{1}{2} (\omega_k \sigma)^2\right) $$
 where $\omega_k = \frac{\pi k}{N}$.
 We map the user-provided `width` to $\sigma$ via $\sigma = \text{width} / \sqrt{12}$ to match the variance of a boxcar of the same width.
 
+### 1.3 Separable N-D and Mixed Kernels
+
+The Cartesian smoother builds one transfer function $H_a$ for each array axis
+$a$. The combined spectral response is their product:
+
+$$
+H(k_0, \ldots, k_{d-1}) = \prod_{a=0}^{d-1} H_a(k_a; W_a, t_a),
+$$
+
+where $W_a$ is the width and $t_a$ is the kernel type along axis $a$.
+Each axis can use a different supported kernel. For boxcars in x and y and
+a Gaussian in z:
+
+$$
+H(k_x, k_y, k_z) = H_{\mathrm{boxcar}}(k_x; W_x)
+                   H_{\mathrm{boxcar}}(k_y; W_y)
+                   H_{\mathrm{gaussian}}(k_z; W_z).
+$$
+
+This is the tensor product of the corresponding one-dimensional smoothing
+operators. It is equivalent, up to floating-point rounding, to applying those
+operators successively along the axes. The implementation multiplies the N-D
+spectrum by each broadcast 1-D response, using one forward and one inverse DCT.
+All Cartesian axes retain reflective boundary conditions. Since each supported
+response preserves its DC component ($H_a(0)=1$), the product preserves constant
+fields as well.
+
+`width` and `kernel_type` sequences follow NumPy array axis order. A scalar width
+or single kernel string is repeated along all axes. Equal widths with different
+kernel types can still produce anisotropic smoothing. Widths are measured in
+grid cells along each axis: for grid spacing $\Delta_a$ and requested physical
+width $L_a$, use $W_a=L_a/\Delta_a$. A Gaussian axis has
+$\sigma_a=W_a/\sqrt{12}$ in grid cells. Mixed kernels do not change the individual
+kernel width conventions or their discretization behavior.
+
 ---
 
 ## 2. Normalized Convolution (Robust Statistics)
@@ -41,6 +76,14 @@ $$ \mu(x) = \frac{\text{smooth}(data \cdot mask)}{\text{smooth}(mask) + \epsilon
 - The **numerator** represents the weighted sum of valid data in the neighborhood.
 - The **denominator** represents the effective sample size (density) in the neighborhood.
 - The ratio is the correct local average, ignoring gaps.
+
+For mixed Cartesian kernels, let $S$ be the complete separable smoothing operator
+from Section 1.3. The normalized mean is $S(fm)/S(m)$: apply all per-axis filters
+to the zero-filled data and mask separately, then divide once. Successively
+computing a normalized mean along each axis generally differs when gaps are
+present, because normalization changes the weights between passes. The same
+combined operator is used for both variance moments and for the density used by
+prefill and support thresholds.
 
 ### 2.3 Robust Variance
 Variance is defined as $E[X^2] - (E[X])^2$. We compute both terms using normalized convolution:

@@ -10,6 +10,7 @@ convolution/statistics surface.
 ## Current Scope (Stats-First)
 
 - DCT-based smoothing for 1D/N-D Cartesian data.
+- Per-axis Cartesian widths and kernel types, including mixed boxcar/Gaussian smoothing.
 - Polar smoothing with adaptive azimuth kernels.
 - Reflective boundaries via DCT and periodic azimuth boundaries via real FFT.
 - Robust local statistics (`dct_mean`, `dct_variance`, `dct_std`, `dct_count`) with NaN support.
@@ -69,6 +70,38 @@ smoothed = dct.dct_smooth(
 var = dct.dct_variance(data, width=10.0)
 std = dct.dct_std(data, width=10.0)
 ```
+
+### 4) Mixed Kernels for a 3D Volume
+
+For a volume stored in **(z, y, x)** order, apply Gaussian smoothing vertically
+and boxcar smoothing horizontally:
+
+```python
+rng = np.random.default_rng(42)
+volume = rng.standard_normal((16, 32, 32))  # (z, y, x)
+
+smoothed = dct.dct_smooth(
+    volume,
+    width=(3.0, 5.0, 5.0),
+    kernel_type=("gaussian", "boxcar", "boxcar"),
+)
+
+# The same kernels work with normalized statistics on data containing NaNs.
+volume[5:7, 12:15, 12:15] = np.nan
+mean = dct.dct_mean(
+    volume,
+    width=(3.0, 5.0, 5.0),
+    kernel_type=("gaussian", "boxcar", "boxcar"),
+)
+```
+
+Kernel and width sequences follow NumPy axis order and must have one entry per
+dimension. Widths are in grid cells along each axis; Gaussian
+`sigma = width / sqrt(12)`. Convert physical widths using the corresponding
+grid spacing before calling. A scalar width applies equal widths, and a single
+kernel string applies that kernel to every axis. Equal widths with different
+kernel types can still produce anisotropic smoothing. Per-axis kernel types
+are supported for Cartesian coordinates; polar smoothing accepts a single string.
 
 ## Quick Cheat Sheet
 

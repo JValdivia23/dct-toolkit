@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 import dct_toolkit as dct
 
@@ -54,3 +55,30 @@ def test_dct_smooth_prefill_max_iter_alias_max_iter_kwarg():
 
     assert np.isnan(out[1]) and np.isnan(out[2])
     assert np.isfinite(out[0]) and np.isfinite(out[3])
+
+
+@pytest.mark.parametrize("with_gaps", [False, True])
+def test_dct_smooth_forwards_mixed_kernels(with_gaps: bool) -> None:
+    """The public wrapper uses mixed kernels for prefill and final smoothing."""
+    data = np.random.default_rng(47).standard_normal((9, 11, 13))
+    if with_gaps:
+        data[3:5, 4:6, 5:7] = np.nan
+    nan_mask = np.isnan(data)
+    kwargs = {"width": (3.0, 5.0, 3.0), "kernel_type": ("gaussian", "boxcar", "boxcar")}
+    filled = dct.dct_prefill(data, max_iter=1, **kwargs)
+    expected = dct.smooth_cartesian(filled, **kwargs)
+    expected[nan_mask] = np.nan
+
+    result = dct.dct_smooth(data, prefill_max_iter=1, **kwargs)
+
+    np.testing.assert_allclose(result, expected, rtol=1e-12, atol=1e-12)
+    assert np.all(np.isfinite(result[~nan_mask]))
+
+
+def test_dct_smooth_mixed_kernels_all_nan() -> None:
+    """An all-NaN volume retains its mask when mixed kernels are requested."""
+    data = np.full((5, 7, 9), np.nan)
+    result = dct.dct_smooth(
+        data, width=3.0, kernel_type=("gaussian", "boxcar", "boxcar")
+    )
+    assert np.all(np.isnan(result))

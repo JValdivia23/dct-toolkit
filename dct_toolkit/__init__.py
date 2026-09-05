@@ -47,8 +47,9 @@ def dct_smooth(
     data : np.ndarray
         Input data.
     width : float or sequence of float
-        Smoothing width. Scalar input keeps isotropic behavior. Sequence
-        input allows anisotropic widths.
+        Smoothing width. A scalar applies the same width to every axis.
+        A sequence allows per-axis widths. Cartesian widths are in grid cells
+        and follow array axis order; Gaussian ``sigma = width / sqrt(12)``.
     coordinates : str, default='cartesian'
         'cartesian' or 'polar'.
     prefill_max_iter : int or None, default=3
@@ -56,7 +57,11 @@ def dct_smooth(
         contains NaNs. If None, prefill iterates until convergence or a
         safety cap of 20 iterations.
     **kwargs
-        Additional arguments (kernel_type, az_res_deg, etc.)
+        Additional arguments (kernel_type, az_res_deg, etc.). For Cartesian
+        data, ``kernel_type`` accepts a string or a sequence of supported
+        kernel names with length ``data.ndim``, in array axis order.
+        The same kernels are used for prefill and final smoothing.
+        Polar data requires a single kernel string. The default is 'gaussian'.
 
     Returns
     -------

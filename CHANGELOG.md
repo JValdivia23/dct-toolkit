@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by passing `min_effective_density=None`.
 
 ### Added
+- Added per-axis Cartesian kernel types: `kernel_type` accepts a string or a
+  length-`ndim` sequence of `'boxcar'`, `'boxcar_discrete'`, and `'gaussian'`.
+  Mixed kernels work with scalar/per-axis widths in `smooth_cartesian`,
+  `dct_smooth`, and Cartesian statistics/prefill. Existing single-string calls
+  retain their behavior; the backend still uses one forward/inverse N-D DCT pair.
+- Added mixed-kernel reference, validation, and NaN-handling tests, plus a 3D
+  usage example and documentation of array axis order and Gaussian width units.
 - Added parity and artifact-regression tests for scalar-vs-vector isotropic widths,
   plus anisotropic Cartesian/polar smoke coverage.
 - Added `min_effective_density` keyword argument to `dct_prefill` (default
