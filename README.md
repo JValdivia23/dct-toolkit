@@ -11,7 +11,7 @@ convolution/statistics surface.
 
 - DCT-based smoothing for 1D/N-D Cartesian data.
 - Per-axis Cartesian widths and kernel types, including mixed boxcar/Gaussian smoothing.
-- Polar smoothing with adaptive azimuth kernels.
+- Polar smoothing with adaptive azimuth widths and independent azimuth/range kernel types.
 - Reflective boundaries via DCT and periodic azimuth boundaries via real FFT.
 - Robust local statistics (`dct_mean`, `dct_variance`, `dct_std`, `dct_count`) with NaN support.
 
@@ -54,15 +54,26 @@ This function will call `dct.dct_prefill()` internally. We need to fill NaNs as 
 
 ### 2) Polar Smoothing with Periodic Azimuth
 
+For data in **(azimuth, range)** order, combine a boxcar along azimuth with a
+Gaussian along range:
+
 ```python
 smoothed = dct.dct_smooth(
     radar_data,
-    width=5.0,
+    width=(5.0, 3.0),
     coordinates="polar",
+    kernel_type=("boxcar", "gaussian"),
     az_boundary="periodic",
     az_res_deg=1.0,
 )
 ```
+
+Both sequences follow `(azimuth, range)` order. Azimuth width adapts with range:
+`width_azimuth / (r * dtheta)` beams, where `r` starts at 1 and `dtheta` is the
+azimuth spacing in radians. Range width is in range gates. Gaussian
+`sigma = effective_width / sqrt(12)` on the selected axis. Filtering applies
+azimuth first, then range; both periodic and reflective azimuth support all
+three kernel types, including `'boxcar_discrete'`.
 
 ### 3) Local Variability Estimates
 
@@ -100,8 +111,8 @@ dimension. Widths are in grid cells along each axis; Gaussian
 `sigma = width / sqrt(12)`. Convert physical widths using the corresponding
 grid spacing before calling. A scalar width applies equal widths, and a single
 kernel string applies that kernel to every axis. Equal widths with different
-kernel types can still produce anisotropic smoothing. Per-axis kernel types
-are supported for Cartesian coordinates; polar smoothing accepts a single string.
+kernel types can still produce anisotropic smoothing. Polar smoothing also
+accepts a kernel pair, using the `(azimuth, range)` convention shown above.
 
 ## Quick Cheat Sheet
 

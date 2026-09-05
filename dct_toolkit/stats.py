@@ -189,8 +189,9 @@ def dct_count(
     **kwargs
         Additional arguments passed to smoothing function (e.g. az_res_deg).
         For Cartesian data, ``kernel_type`` accepts a string or one kernel
-        name per axis; polar data requires a single string. See
-        ``smooth_cartesian`` for kernel names and width conventions.
+        name per axis; polar data accepts a string or an (azimuth, range)
+        pair. See ``smooth_cartesian`` and ``smooth_polar`` for kernel names
+        and width conventions.
 
     Returns
     -------
@@ -277,9 +278,9 @@ def dct_mean(
     **kwargs
         Additional arguments passed to smoothing. For Cartesian data,
         ``kernel_type`` accepts a string or one kernel name per axis;
-        polar data requires a single string. The same combined kernel
-        smooths both data and mask. See ``smooth_cartesian`` for kernel
-        names and width conventions.
+        polar data accepts a string or an (azimuth, range) pair. The same
+        combined smoothing operator filters both data and mask. See
+        ``smooth_cartesian`` and ``smooth_polar`` for kernel names and widths.
 
     Returns
     -------
@@ -414,8 +415,9 @@ def dct_prefill(
         Additional keyword arguments passed to ``dct_mean``
         (e.g. ``az_res_deg``, ``az_boundary``, ``kernel_type``).
         For Cartesian data, ``kernel_type`` accepts a string or one kernel
-        name per axis; polar data requires a single string. See
-        ``smooth_cartesian`` for kernel names and width conventions.
+        name per axis; polar data accepts a string or an (azimuth, range)
+        pair. See ``smooth_cartesian`` and ``smooth_polar`` for kernel names
+        and width conventions.
         If ``kernel_type`` is not provided, ``'gaussian'`` is used to keep
         prefill behavior stable in low-support regions.
 
@@ -554,8 +556,9 @@ def dct_variance(
     **kwargs
         Additional arguments passed to ``dct_mean`` for both moments.
         For Cartesian data, ``kernel_type`` accepts a string or one kernel
-        name per axis; polar data requires a single string. See
-        ``smooth_cartesian`` for kernel names and width conventions.
+        name per axis; polar data accepts a string or an (azimuth, range)
+        pair. See ``smooth_cartesian`` and ``smooth_polar`` for kernel names
+        and width conventions.
 
     Returns
     -------
@@ -636,8 +639,8 @@ def dct_std(
     **kwargs
         Additional arguments passed to ``dct_variance``. For Cartesian data,
         ``kernel_type`` accepts a string or one kernel name per axis;
-        polar data requires a single string. See ``smooth_cartesian``
-        for kernel names and width conventions.
+        polar data accepts a string or an (azimuth, range) pair. See
+        ``smooth_cartesian`` and ``smooth_polar`` for kernel names and widths.
 
     Returns
     -------

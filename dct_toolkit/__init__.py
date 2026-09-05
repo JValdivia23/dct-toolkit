@@ -60,8 +60,9 @@ def dct_smooth(
         Additional arguments (kernel_type, az_res_deg, etc.). For Cartesian
         data, ``kernel_type`` accepts a string or a sequence of supported
         kernel names with length ``data.ndim``, in array axis order.
+        Polar data accepts a string or ``(kernel_azimuth, kernel_range)`` pair.
         The same kernels are used for prefill and final smoothing.
-        Polar data requires a single kernel string. The default is 'gaussian'.
+        The default is 'gaussian'.
 
     Returns
     -------

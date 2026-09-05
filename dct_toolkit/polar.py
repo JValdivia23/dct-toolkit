@@ -6,11 +6,13 @@ It handles the non-uniform physical width of azimuth beams by adapting
 the smoothing kernel in the spectral domain.
 """
 
-import numpy as np
-import scipy.fft
 import warnings
 from typing import Tuple
 
+import numpy as np
+import scipy.fft
+
+from ._kernels import KernelLike, normalize_kernel_types
 from ._widths import WidthLike, normalize_widths
 from .core import get_dct_transfer_function
 
@@ -19,7 +21,7 @@ def compute_polar_transfer_functions(
     shape: Tuple[int, int],
     az_res_deg: float,
     width_pixels: WidthLike,
-    kernel_type: str = "gaussian",
+    kernel_type: KernelLike = "gaussian",
     az_boundary: str = "reflective",
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -36,9 +38,15 @@ def compute_polar_transfer_functions(
         Azimuth resolution in degrees.
     width_pixels : float or sequence of float
         Width specification in pixels as ``(width_azimuth, width_range)``.
-        Scalar input applies isotropic width in both dimensions.
-    kernel_type : str
-        'boxcar', 'boxcar_discrete', 'gaussian'.
+        A scalar applies equal nominal widths. At range index ``r`` (starting
+        at 1), the azimuth width in beams is ``width_azimuth / (r * dtheta)``,
+        where ``dtheta`` is in radians. Range width is in range gates.
+    kernel_type : str or sequence of str, default='gaussian'
+        'boxcar', 'boxcar_discrete', or 'gaussian'. A string applies to both
+        dimensions. A pair selects ``(kernel_azimuth, kernel_range)``.
+        Gaussian ``sigma = width / sqrt(12)`` uses the effective width on
+        each axis. Discrete boxcars round that width to an integer, clamp
+        it to at least 1, and increment even values to obtain an odd window.
     az_boundary : str, default='reflective'
         Azimuth boundary handling: ``'reflective'`` (DCT) or
         ``'periodic'`` (RFFT).
@@ -51,13 +59,20 @@ def compute_polar_transfer_functions(
         ``(n_azimuth // 2 + 1, n_range)`` for periodic boundaries.
     H_range : np.ndarray
         Range transfer function of shape (n_range,).
+
+    Raises
+    ------
+    ValueError
+        If the kernel specification is not a supported string or a 1-D
+        pair of supported strings, or the azimuth boundary is unknown.
     """
     n_az, n_range = shape
     az_res_rad = np.deg2rad(az_res_deg)
     width_azimuth, width_range = normalize_widths(width_pixels, 2, name="width_pixels")
+    kernel_azimuth, kernel_range = normalize_kernel_types(kernel_type, 2)
 
     # Range transfer function (reflective/DCT).
-    H_range = get_dct_transfer_function(n_range, kernel_type, float(width_range))
+    H_range = get_dct_transfer_function(n_range, kernel_range, float(width_range))
 
     # Azimuth widths adapt with range: w_az(r) = width_azimuth / (r * dtheta).
     r_indices = np.arange(1, n_range + 1)
@@ -66,7 +81,7 @@ def compute_polar_transfer_functions(
     if az_boundary == "reflective":
         H_az_T = np.zeros((n_range, n_az))
         for i in range(n_range):
-            H_az_T[i, :] = get_dct_transfer_function(n_az, kernel_type, w_beams[i])
+            H_az_T[i, :] = get_dct_transfer_function(n_az, kernel_azimuth, w_beams[i])
         H_az = H_az_T.T
 
     elif az_boundary == "periodic":
@@ -77,7 +92,15 @@ def compute_polar_transfer_functions(
         for i in range(n_range):
             width = w_beams[i]
 
-            if kernel_type == "boxcar":
+            if kernel_azimuth in ("boxcar", "boxcar_discrete"):
+                if kernel_azimuth == "boxcar_discrete":
+                    w_int = max(1, int(np.round(width)))
+                    if w_int % 2 == 0:
+                        w_int += 1
+                    width = float(w_int)
+
+                # For odd integer widths this is the normalized cosine sum
+                # of a centered discrete boxcar, including circular wraps.
                 theta_half = (np.pi * k) / n_az
                 H = np.zeros(n_freq)
                 H[0] = 1.0
@@ -90,12 +113,7 @@ def compute_polar_transfer_functions(
                 H[mask] = np.where(valid, num / (den * width), 0.0)
                 H_az_T[i, :] = H
 
-            elif kernel_type == "gaussian":
-                omega = (2 * np.pi * k) / n_az
-                sigma = width / np.sqrt(12)
-                H_az_T[i, :] = np.exp(-0.5 * (omega * sigma) ** 2)
-
-            else:
+            elif kernel_azimuth == "gaussian":
                 omega = (2 * np.pi * k) / n_az
                 sigma = width / np.sqrt(12)
                 H_az_T[i, :] = np.exp(-0.5 * (omega * sigma) ** 2)
@@ -112,11 +130,32 @@ def compute_polar_transfer_functions_v2(
     shape: Tuple[int, int],
     az_res_deg: float,
     width_pixels: WidthLike,
-    kernel_type: str = "gaussian",
+    kernel_type: KernelLike = "gaussian",
     az_boundary: str = "reflective",
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Backward-compatible wrapper for ``compute_polar_transfer_functions``.
+
+    Parameters
+    ----------
+    shape : tuple of int
+        (n_azimuth, n_range).
+    az_res_deg : float
+        Azimuth resolution in degrees.
+    width_pixels : float or sequence of float
+        Scalar width or ``(width_azimuth, width_range)``; see
+        ``compute_polar_transfer_functions`` for the adaptive width convention.
+    kernel_type : str or sequence of str, default='gaussian'
+        A supported kernel name or ``(kernel_azimuth, kernel_range)`` pair.
+    az_boundary : str, default='reflective'
+        'reflective' or 'periodic'.
+
+    Returns
+    -------
+    H_az : np.ndarray
+        Azimuth transfer function, varying with range.
+    H_range : np.ndarray
+        Range transfer function.
     """
     return compute_polar_transfer_functions(
         shape=shape,
@@ -133,7 +172,7 @@ def smooth_polar(
     az_res_deg: float = 1.0,
     az_boundary: str = "reflective",
     range_boundary: str = "reflective",
-    kernel_type: str = "gaussian",
+    kernel_type: KernelLike = "gaussian",
 ) -> np.ndarray:
     """
     Apply smoothing to 2D polar data (Azimuth x Range).
@@ -144,19 +183,50 @@ def smooth_polar(
         Input array of shape (n_azimuth, n_range).
     width_pixels : float or sequence of float
         Width specification in pixels as ``(width_azimuth, width_range)``.
-        Scalar input applies isotropic width in both dimensions.
+        A scalar applies equal nominal widths. Azimuth width adapts with
+        range; see ``compute_polar_transfer_functions`` for units and scaling.
     az_res_deg : float
         Azimuth resolution in degrees.
     az_boundary : str
         'reflective' (default) or 'periodic'.
     range_boundary : str
         'reflective' (default).
-    kernel_type : str
-        Kernel type.
+    kernel_type : str or sequence of str, default='gaussian'
+        'boxcar', 'boxcar_discrete', or 'gaussian'. A string applies to both
+        dimensions. A pair selects ``(kernel_azimuth, kernel_range)``,
+        independently of whether ``width_pixels`` is scalar or a pair.
 
     Returns
     -------
     smoothed : np.ndarray
+        Smoothed data with the same shape as input.
+
+    Raises
+    ------
+    ValueError
+        If data is not 2D, the kernel specification is invalid, or the
+        azimuth boundary is unknown.
+    NotImplementedError
+        If the range boundary is not 'reflective'.
+
+    Notes
+    -----
+    Smoothing applies the range-adaptive azimuth filter first, then the range
+    filter. Reversing this order generally changes the result. All three
+    kernels support both azimuth boundary modes. Input should be finite;
+    use ``dct_mean`` or ``dct_smooth`` for data containing NaNs.
+
+    Examples
+    --------
+    Apply a circular boxcar in azimuth and a Gaussian in range:
+
+    >>> data = np.ones((36, 20))
+    >>> smoothed = smooth_polar(
+    ...     data, width_pixels=(5.0, 3.0), az_res_deg=10.0,
+    ...     kernel_type=("boxcar", "gaussian"), az_boundary="periodic",
+    ... )
+    >>> np.allclose(smoothed, data)
+    True
     """
     # Validation
     if data.ndim != 2:

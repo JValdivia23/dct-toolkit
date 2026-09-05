@@ -107,6 +107,44 @@ $$ W_{grid}(r) = \frac{W_{phys}}{r \cdot \Delta \phi_{res}} $$
 - **Azimuth**: The angular domain wraps around ($0^\circ \equiv 360^\circ$).
   - **Periodic BC**: We use the Real FFT (RFFT) instead of DCT. This enforces circular convolution, ensuring values at $359^\circ$ smooth correctly into values at $0^\circ$.
 
+### 3.3 Mixed Polar Kernels and Filter Order
+
+Polar `kernel_type` pairs follow `(azimuth, range)` order. The selected azimuth
+kernel still uses the effective width
+$w_{\mathrm{az}}(r)=W_{\mathrm{az}}/(r\,\Delta\theta)$ at each range gate, while
+the range kernel uses $W_{\mathrm{range}}$ gates. Here $r=1,\ldots,n_{\mathrm{range}}$
+is the existing range-index convention and $\Delta\theta$ is in radians.
+Gaussian standard deviations are the corresponding effective widths divided
+by $\sqrt{12}$.
+
+Let $A$ apply the chosen adaptive azimuth filter independently at each range
+gate, and let $R$ apply reflective smoothing in range. The polar smoother is
+$S=R\circ A$: azimuth first, range second. Because $A$ varies with range,
+$R\circ A$ and $A\circ R$ generally differ. This is not the stationary tensor
+product used for Cartesian data. Both filters preserve constants, so their
+composition does too. Normalized statistics use $S(fm)/S(m)$ with the same order
+and kernel pair for data and mask; variance, prefill, and density thresholds
+use that same operator.
+
+### 3.4 Periodic Discrete Boxcar
+
+For `'boxcar_discrete'`, round the effective azimuth width to an integer, clamp
+it to at least 1, and increment even sizes to obtain an odd window $M=2m+1$.
+On a periodic axis with $N$ beams, its response at $\omega_k=2\pi k/N$ is
+
+$$
+H(k)=\frac{1+2\sum_{j=1}^{m}\cos(j\omega_k)}{M}
+    =\frac{\sin(M\omega_k/2)}{M\sin(\omega_k/2)},\qquad H(0)=1.
+$$
+
+The implementation uses the sine ratio, with DC set explicitly to 1. It is
+equivalent to averaging $M$ centered samples with circular wrapping; a window
+larger than $N$ counts repeated visits to a beam. The window is chosen separately
+at each range gate after applying the adaptive width conversion. Reflective
+azimuth uses the same odd-window convention with its DCT response. Periodic
+discrete boxcars now use this response; the former Gaussian substitution is
+removed.
+
 ---
 
 ## 4. Spectral Inpainting (Gap Filling)

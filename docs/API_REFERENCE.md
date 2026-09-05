@@ -33,8 +33,9 @@ Top-level convenience wrapper for Cartesian and polar smoothing.
 - Default kernel is `'gaussian'` unless `kernel_type` is explicitly provided.
 - For Cartesian data, `kernel_type` accepts a string or a sequence with one
   supported kernel name per array axis, as documented for `smooth_cartesian`.
-  The same kernels are used in prefill and final smoothing. Polar data accepts
-  a single kernel string.
+  Polar data accepts a string or `(kernel_azimuth, kernel_range)` pair, as
+  documented for `smooth_polar`. The same kernels are used in prefill and
+  final smoothing.
 - If input contains NaNs, smoothing automatically runs a NaN-safe prefill step,
   applies spectral smoothing on the finite field, then restores the original NaN mask.
 - `prefill_max_iter=3` by default for predictable runtime.
@@ -88,13 +89,54 @@ Physical widths must first be divided by the grid spacing along each axis.
 #### `smooth_polar(data, width_pixels, az_res_deg=1.0, az_boundary='reflective', range_boundary='reflective', kernel_type='gaussian')`
 Apply smoothing to 2D polar data (`n_azimuth`, `n_range`) with adaptive azimuth kernels.
 
-- `width_pixels` (`float` or `(width_azimuth, width_range)`): Scalar keeps isotropic
-  behavior; tuple enables anisotropic polar smoothing.
+- `width_pixels` (`float` or `(width_azimuth, width_range)`): A scalar applies
+  equal nominal widths; a pair specifies independent widths. Values must be
+  finite and positive. At range index `r` (starting at 1), azimuth width is
+  `width_azimuth / (r * dtheta)` beams, with `dtheta` in radians; range width is
+  in range gates. Gaussian `sigma = effective_width / sqrt(12)` on either axis.
 - `az_boundary='reflective'`: DCT-based reflective boundary.
 - `az_boundary='periodic'`: real FFT periodic boundary (0/360 wrap).
 - `range_boundary`: currently `'reflective'`.
-- `kernel_type` is a single string; per-axis kernel sequences are supported
-  only for Cartesian coordinates.
+- `kernel_type` (`str` or sequence of `str`): `'boxcar'`, `'boxcar_discrete'`,
+  or `'gaussian'`. A string applies to both dimensions; a 1-D list, tuple, or
+  NumPy array of length 2 selects `(kernel_azimuth, kernel_range)`. Kernel and
+  width pairs use the same order and can be specified independently.
+- All three kernels support reflective and periodic azimuth. Discrete boxcars
+  round the effective width to an integer, clamp it to at least 1, and increment
+  even sizes. In azimuth this conversion occurs separately at each range gate.
+  Periodic windows use circular averaging, including windows larger than a sweep.
+- Invalid kernel pair length, dimensionality, non-string entries, or unknown
+  names raise `ValueError`, using the same validation as Cartesian smoothing.
+- Filtering applies the adaptive azimuth operator first, then the range
+  operator. Reversing these operations generally changes the result because
+  the azimuth width varies with range. The polar backend accepts 2D data.
+- Input should be finite; `dct_mean` and `dct_smooth` handle NaNs.
+
+For data in **(azimuth, range)** order:
+
+```python
+import numpy as np
+from dct_toolkit import dct_smooth
+
+radar_data = np.random.default_rng(42).standard_normal((360, 100))
+smoothed = dct_smooth(
+    radar_data,
+    coordinates="polar",
+    width=(5.0, 3.0),
+    kernel_type=("boxcar", "gaussian"),
+    az_res_deg=1.0,
+    az_boundary="periodic",
+)
+```
+
+`compute_polar_transfer_functions` and its compatibility alias
+`compute_polar_transfer_functions_v2` accept the same kernel pair. Their return
+values remain the adaptive azimuth transfer array and the range transfer vector.
+
+**Behavior correction:** periodic azimuth with `'boxcar_discrete'` now uses the
+requested discrete boxcar. Earlier versions substituted a Gaussian in this
+branch. Existing single-string Gaussian and analytical boxcar calls retain
+their behavior.
 
 ---
 
@@ -108,14 +150,18 @@ For Cartesian coordinates, all functions below accept `kernel_type` through
 `**kwargs` as a single string or a length-`data.ndim` sequence (`mask.ndim` for
 `dct_count`), using the same axis order and width conventions as
 `smooth_cartesian`. This includes `dct_prefill`. The default is `'gaussian'`.
-For polar coordinates, `kernel_type` remains a single string.
+For polar coordinates, `kernel_type` accepts a string or a pair in
+`(azimuth, range)` order, with the width conventions of `smooth_polar`.
 
-Mixed-kernel means apply the complete separable kernel to both the zero-filled
+Mixed-kernel means apply the complete smoothing operator to both the zero-filled
 data and validity mask before dividing. Variance uses that same kernel for both
 moments; prefill and density thresholds also use the requested kernels.
+For polar data this includes the same azimuth-then-range order in every pass.
 `dct_count` retains the convention `clip(smooth(mask), 0, 1) * prod(widths)` for
 Cartesian data; this is an effective window count, including for Gaussian or
 mixed kernels, rather than a literal number of neighbors in a finite kernel.
+Polar counts retain the corresponding range-dependent factor
+`width_range * width_azimuth / (r * dtheta)`.
 
 For heavily gapped fields, statistical functions include internal stability
 fallbacks to avoid unstable normalized-convolution ratios in poorly supported

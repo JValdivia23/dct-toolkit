@@ -22,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by passing `min_effective_density=None`.
 
 ### Added
+- Added mixed polar kernels in `(azimuth, range)` order for `smooth_polar`,
+  both polar transfer-function entry points, and high-level smoothing,
+  statistics, and prefill. A single string still applies to both dimensions.
+  Both azimuth boundary modes retain range-adaptive widths and apply azimuth
+  smoothing before reflective range smoothing.
+- Added independent polar reference tests covering all mixed kernel pairs,
+  circular discrete averaging, odd/even azimuth lengths, singleton axes,
+  input validation, normalized statistics, prefill, and NaN handling.
 - Added per-axis Cartesian kernel types: `kernel_type` accepts a string or a
   length-`ndim` sequence of `'boxcar'`, `'boxcar_discrete'`, and `'gaussian'`.
   Mixed kernels work with scalar/per-axis widths in `smooth_cartesian`,
@@ -37,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   density is below the threshold. New tests in `tests/test_stats.py` cover
   the default, the disabled, the custom threshold, and the polar-coordinates
   paths.
+
+### Fixed
+- Periodic azimuth with `'boxcar_discrete'` now uses an actual centered discrete
+  boxcar with an odd integer window, matching the reflective width convention.
+  It previously substituted a Gaussian, so results for this option intentionally
+  change for both single-string and mixed-kernel calls.
 
 ## [0.5.0] - 2026-04-14
 
