@@ -38,6 +38,8 @@ Top-level convenience wrapper for Cartesian and polar smoothing.
   final smoothing.
 - If input contains NaNs, smoothing automatically runs a NaN-safe prefill step,
   applies spectral smoothing on the finite field, then restores the original NaN mask.
+- For polar input, `az_res_deg` must be a finite, positive real scalar. This
+  validation also applies when the input is entirely NaN.
 - `prefill_max_iter=3` by default for predictable runtime.
 - `prefill_max_iter=None` means iterate prefill until convergence (or safety cap of 20).
 - Legacy alias: passing `max_iter=...` in kwargs is mapped to `prefill_max_iter`.
@@ -94,6 +96,10 @@ Apply smoothing to 2D polar data (`n_azimuth`, `n_range`) with adaptive azimuth 
   finite and positive. At range index `r` (starting at 1), azimuth width is
   `width_azimuth / (r * dtheta)` beams, with `dtheta` in radians; range width is
   in range gates. Gaussian `sigma = effective_width / sqrt(12)` on either axis.
+- `az_res_deg`: A finite, positive real scalar in degrees. Python and NumPy
+  numeric scalars, including zero-dimensional numeric arrays, are accepted.
+  Zero, negative, nonfinite, complex, boolean, string, and nonscalar inputs
+  raise `ValueError`. The spacing must remain positive when converted to radians.
 - `az_boundary='reflective'`: DCT-based reflective boundary.
 - `az_boundary='periodic'`: real FFT periodic boundary (0/360 wrap).
 - `range_boundary`: currently `'reflective'`.
@@ -152,6 +158,9 @@ For Cartesian coordinates, all functions below accept `kernel_type` through
 `smooth_cartesian`. This includes `dct_prefill`. The default is `'gaussian'`.
 For polar coordinates, `kernel_type` accepts a string or a pair in
 `(azimuth, range)` order, with the width conventions of `smooth_polar`.
+All polar statistics require the same finite, positive scalar `az_res_deg` as
+`smooth_polar`; `dct_count` uses the same validated spacing for its window area.
+Validation also applies to all-NaN input and prefill calls with no targets.
 
 Mixed-kernel means apply the complete smoothing operator to both the zero-filled
 data and validity mask before dividing. Variance uses that same kernel for both
@@ -206,6 +215,11 @@ Fill gaps using iterative normalized convolution based on `dct_mean`.
   stop early once no NaNs remain.
 - Any unresolved targets after iterations are filled with nearest-neighbor fallback
   to guarantee finite outputs when at least one finite value exists.
+- Polar nearest-neighbor propagation tries range first, then azimuth. With
+  `az_boundary='periodic'`, azimuth neighbors wrap across the first/last beam,
+  including in the global fallback. Range distances remain nonperiodic.
+  During the azimuth pass, equidistant neighbors prefer the preceding beam
+  around the circle. Reflective azimuth uses ordinary index distances.
 - `min_effective_density=0.35` (default) gates per-iteration mean estimates by
   the local valid-sample density `smooth(mask)`. Cells whose local density is
   below the threshold are left as NaN for that iteration and may be filled in

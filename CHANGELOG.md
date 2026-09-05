@@ -47,6 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paths.
 
 ### Fixed
+- Polar nearest-neighbor prefill now respects periodic azimuth in both axis-wise
+  propagation and the global fallback, correcting seam-dependent results on
+  sparse sweeps. Range propagation remains nonperiodic. Added sparse-sweep
+  rotation, targeted global fallback, and singleton-axis regression tests.
+- Polar smoothing, statistics, and prefill now require a finite, positive real
+  scalar `az_res_deg`, including calls that return early without smoothing.
+  Shared spacing validation prevents negative counts and invalid width arithmetic;
+  tests cover invalid inputs and valid fractional/NumPy scalar spacings.
 - Periodic azimuth with `'boxcar_discrete'` now uses an actual centered discrete
   boxcar with an odd integer window, matching the reflective width convention.
   It previously substituted a Gaussian, so results for this option intentionally

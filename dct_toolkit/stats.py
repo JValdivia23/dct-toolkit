@@ -13,7 +13,7 @@ import scipy.ndimage
 
 from ._widths import WidthLike, normalize_widths
 from .cartesian import smooth_cartesian
-from .polar import smooth_polar
+from .polar import _azimuth_spacing_radians, smooth_polar
 
 
 _PREFILL_MAX_ITER_CAP = 20
@@ -63,8 +63,9 @@ def _fill_nan_nearest_along_axis(
     data: np.ndarray,
     fill_target: np.ndarray,
     axis: int,
+    periodic: bool = False,
 ) -> np.ndarray:
-    """Fill target NaNs by nearest finite neighbor along one axis."""
+    """Fill target NaNs along an axis, optionally using circular distances."""
     out = np.asarray(data).copy()
     target = np.asarray(fill_target, dtype=bool)
 
@@ -98,12 +99,17 @@ def _fill_nan_nearest_along_axis(
         miss_idx = idx[unresolved]
         insert_pos = np.searchsorted(finite_idx, miss_idx, side="left")
 
-        left_pos = np.clip(insert_pos - 1, 0, finite_idx.size - 1)
-        right_pos = np.clip(insert_pos, 0, finite_idx.size - 1)
-        left_idx = finite_idx[left_pos]
-        right_idx = finite_idx[right_pos]
-
-        use_left = (miss_idx - left_idx) <= (right_idx - miss_idx)
+        if periodic:
+            left_idx = finite_idx[(insert_pos - 1) % finite_idx.size]
+            right_idx = finite_idx[insert_pos % finite_idx.size]
+            # Resolve ties toward the preceding beam, independently of the seam.
+            use_left = (miss_idx - left_idx) % n_axis <= (right_idx - miss_idx) % n_axis
+        else:
+            left_pos = np.clip(insert_pos - 1, 0, finite_idx.size - 1)
+            right_pos = np.clip(insert_pos, 0, finite_idx.size - 1)
+            left_idx = finite_idx[left_pos]
+            right_idx = finite_idx[right_pos]
+            use_left = (miss_idx - left_idx) <= (right_idx - miss_idx)
         nearest_idx = np.where(use_left, left_idx, right_idx)
         row[miss_idx] = row[nearest_idx]
 
@@ -114,6 +120,7 @@ def _fill_nan_nearest(
     data: np.ndarray,
     fill_target: np.ndarray,
     primary_axis: int,
+    periodic_axis: Optional[int] = None,
 ) -> np.ndarray:
     """Fill target NaNs using nearest neighbors with axis-first/global fallback."""
     out = np.asarray(data).copy()
@@ -133,6 +140,13 @@ def _fill_nan_nearest(
     if axis < 0 or axis >= out.ndim:
         raise ValueError(f"Invalid primary_axis {primary_axis} for shape {out.shape}")
 
+    if periodic_axis is not None:
+        periodic_axis = int(periodic_axis)
+        if periodic_axis < 0:
+            periodic_axis += out.ndim
+        if periodic_axis < 0 or periodic_axis >= out.ndim:
+            raise ValueError(f"Invalid periodic_axis {periodic_axis} for shape {out.shape}")
+
     unresolved = target & np.isnan(out)
     if not np.any(unresolved):
         return out
@@ -143,7 +157,9 @@ def _fill_nan_nearest(
     for ax in axis_order:
         if not np.any(unresolved):
             break
-        out = _fill_nan_nearest_along_axis(out, unresolved, axis=ax)
+        out = _fill_nan_nearest_along_axis(
+            out, unresolved, axis=ax, periodic=(ax == periodic_axis)
+        )
         unresolved = target & np.isnan(out)
 
     if not np.any(unresolved):
@@ -154,11 +170,22 @@ def _fill_nan_nearest(
     if not np.any(finite):
         return out
 
+    search_finite = finite
+    center = [slice(None)] * out.ndim
+    if periodic_axis is not None:
+        # Adjacent copies provide neighbors across either end of the periodic axis.
+        search_finite = np.concatenate((finite, finite, finite), axis=periodic_axis)
+        n_periodic = out.shape[periodic_axis]
+        center[periodic_axis] = slice(n_periodic, 2 * n_periodic)
+
     nearest_indices = scipy.ndimage.distance_transform_edt(
-        ~finite,
+        ~search_finite,
         return_distances=False,
         return_indices=True,
     )
+    nearest_indices = nearest_indices[(slice(None),) + tuple(center)]
+    if periodic_axis is not None:
+        nearest_indices[periodic_axis] %= n_periodic
     nearest_coords = tuple(idx[unresolved] for idx in nearest_indices)
     out[unresolved] = out[nearest_coords]
     return out
@@ -219,7 +246,7 @@ def dct_count(
 
         n_az, n_range = mask_bool.shape
         az_res_deg = kwargs.get("az_res_deg", 1.0)
-        az_res_rad = np.deg2rad(az_res_deg)
+        az_res_rad = _azimuth_spacing_radians(az_res_deg)
         r_indices = np.arange(1, n_range + 1)
 
         width_azimuth, width_range = widths
@@ -434,6 +461,10 @@ def dct_prefill(
     - After iterative normalized-convolution filling, any remaining target NaNs
       are filled by nearest-neighbor propagation to guarantee finite output when
       at least one finite value exists.
+      Polar propagation tries range first, then azimuth. With
+      ``az_boundary='periodic'``, azimuth distances wrap across the sweep seam,
+      including in the global fallback; range distances remain nonperiodic.
+      During the azimuth pass, equal-distance neighbors prefer the preceding beam.
     - The ``min_effective_density`` gate is also passed to the internal
       ``dct_mean`` call so the per-iteration mean statistic is consistently
       gated by the same criterion.
@@ -443,6 +474,8 @@ def dct_prefill(
 
     if max_iter is not None and max_iter < 1:
         raise ValueError(f"max_iter must be >= 1 or None, got {max_iter}")
+    if coordinates == "polar":
+        _azimuth_spacing_radians(kwargs.get("az_res_deg", 1.0))
 
     gate_enabled = min_effective_density is not None and float(min_effective_density) > 0
     gate_threshold = float(min_effective_density) if gate_enabled else None
@@ -519,7 +552,12 @@ def dct_prefill(
     unresolved = target & np.isnan(out)
     if np.any(unresolved):
         fill_axis = 1 if (coordinates == "polar" and out.ndim >= 2) else -1
-        out = _fill_nan_nearest(out, unresolved, primary_axis=fill_axis)
+        periodic_axis = (
+            0 if coordinates == "polar" and kwargs.get("az_boundary") == "periodic" else None
+        )
+        out = _fill_nan_nearest(
+            out, unresolved, primary_axis=fill_axis, periodic_axis=periodic_axis
+        )
 
     return out
 

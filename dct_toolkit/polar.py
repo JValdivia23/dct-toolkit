@@ -17,6 +17,24 @@ from ._widths import WidthLike, normalize_widths
 from .core import get_dct_transfer_function
 
 
+def _azimuth_spacing_radians(az_res_deg: float) -> float:
+    """Validate a positive real scalar azimuth spacing and convert it to radians."""
+    message = "az_res_deg must be a finite, positive real scalar"
+    try:
+        value = np.asarray(az_res_deg)
+        if value.ndim != 0 or value.dtype.kind not in "iuf":
+            raise ValueError(message)
+        degrees = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(message) from exc
+    if not np.isfinite(degrees) or degrees <= 0:
+        raise ValueError(message)
+    radians = float(np.deg2rad(degrees))
+    if radians == 0:
+        raise ValueError(f"{message}; spacing is too small to represent in radians")
+    return radians
+
+
 def compute_polar_transfer_functions(
     shape: Tuple[int, int],
     az_res_deg: float,
@@ -35,7 +53,7 @@ def compute_polar_transfer_functions(
     shape : tuple
         (n_azimuth, n_range).
     az_res_deg : float
-        Azimuth resolution in degrees.
+        Azimuth resolution in degrees, as a finite, positive real scalar.
     width_pixels : float or sequence of float
         Width specification in pixels as ``(width_azimuth, width_range)``.
         A scalar applies equal nominal widths. At range index ``r`` (starting
@@ -64,10 +82,11 @@ def compute_polar_transfer_functions(
     ------
     ValueError
         If the kernel specification is not a supported string or a 1-D
-        pair of supported strings, or the azimuth boundary is unknown.
+        pair of supported strings, the azimuth boundary is unknown, or
+        ``az_res_deg`` is not a finite, positive real scalar.
     """
     n_az, n_range = shape
-    az_res_rad = np.deg2rad(az_res_deg)
+    az_res_rad = _azimuth_spacing_radians(az_res_deg)
     width_azimuth, width_range = normalize_widths(width_pixels, 2, name="width_pixels")
     kernel_azimuth, kernel_range = normalize_kernel_types(kernel_type, 2)
 
@@ -141,7 +160,7 @@ def compute_polar_transfer_functions_v2(
     shape : tuple of int
         (n_azimuth, n_range).
     az_res_deg : float
-        Azimuth resolution in degrees.
+        Azimuth resolution in degrees, as a finite, positive real scalar.
     width_pixels : float or sequence of float
         Scalar width or ``(width_azimuth, width_range)``; see
         ``compute_polar_transfer_functions`` for the adaptive width convention.
@@ -186,7 +205,7 @@ def smooth_polar(
         A scalar applies equal nominal widths. Azimuth width adapts with
         range; see ``compute_polar_transfer_functions`` for units and scaling.
     az_res_deg : float
-        Azimuth resolution in degrees.
+        Azimuth resolution in degrees, as a finite, positive real scalar.
     az_boundary : str
         'reflective' (default) or 'periodic'.
     range_boundary : str
@@ -205,7 +224,8 @@ def smooth_polar(
     ------
     ValueError
         If data is not 2D, the kernel specification is invalid, or the
-        azimuth boundary is unknown.
+        azimuth boundary is unknown, or ``az_res_deg`` is not a finite,
+        positive real scalar.
     NotImplementedError
         If the range boundary is not 'reflective'.
 

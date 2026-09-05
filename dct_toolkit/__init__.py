@@ -11,7 +11,7 @@ import numpy as np
 from .core import dct_convolve_1d, get_dct_transfer_function
 from ._widths import WidthLike
 from .cartesian import smooth_cartesian
-from .polar import smooth_polar
+from .polar import _azimuth_spacing_radians, smooth_polar
 from .stats import dct_count, dct_mean, dct_prefill, dct_std, dct_variance
 
 __version__ = "0.5.0"
@@ -61,6 +61,7 @@ def dct_smooth(
         data, ``kernel_type`` accepts a string or a sequence of supported
         kernel names with length ``data.ndim``, in array axis order.
         Polar data accepts a string or ``(kernel_azimuth, kernel_range)`` pair.
+        Polar ``az_res_deg`` must be a finite, positive real scalar.
         The same kernels are used for prefill and final smoothing.
         The default is 'gaussian'.
 
@@ -71,6 +72,8 @@ def dct_smooth(
     """
     data_array = np.asarray(data)
     nan_mask = np.isnan(data_array)
+    if coordinates == "polar":
+        _azimuth_spacing_radians(kwargs.get("az_res_deg", 1.0))
 
     # Support legacy alias in wrapper calls.
     if "max_iter" in kwargs:

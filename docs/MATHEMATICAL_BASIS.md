@@ -145,6 +145,26 @@ azimuth uses the same odd-window convention with its DCT response. Periodic
 discrete boxcars now use this response; the former Gaussian substitution is
 removed.
 
+### 3.5 Polar Nearest-Neighbor Prefill
+
+If normalized convolution leaves gaps, nearest-neighbor propagation tries range
+first, then azimuth. For periodic azimuth with $N$ beams, the azimuth pass uses
+the circular index distance
+
+$$d_{\mathrm{az}}(i,j)=\min\bigl(|i-j|, N-|i-j|\bigr).$$
+
+Equal-distance neighbors in this pass prefer the preceding beam around the
+circle, so relocating the sweep seam does not change that choice. Range
+distances remain ordinary index distances. If axis-wise propagation cannot
+reach a target, the global fallback uses Euclidean distance in index space,
+with the same circular azimuth distance. It searches three adjacent copies
+of the sweep and takes results from the middle copy. Only azimuth is repeated.
+Non-target cells remain unchanged.
+
+Azimuth spacing must be a finite, positive real scalar in degrees and remain
+positive after conversion to radians. Smoothing and effective-count area
+calculations share this validation and conversion.
+
 ---
 
 ## 4. Spectral Inpainting (Gap Filling)

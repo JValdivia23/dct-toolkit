@@ -74,6 +74,9 @@ azimuth spacing in radians. Range width is in range gates. Gaussian
 `sigma = effective_width / sqrt(12)` on the selected axis. Filtering applies
 azimuth first, then range; both periodic and reflective azimuth support all
 three kernel types, including `'boxcar_discrete'`.
+`az_res_deg` must be a finite, positive scalar in degrees. For gapped data,
+periodic azimuth also wraps the nearest-neighbor prefill fallback across the
+sweep seam; range distances remain nonperiodic.
 
 ### 3) Local Variability Estimates
 
