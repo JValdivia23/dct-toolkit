@@ -413,14 +413,8 @@ git merge feature/hanning-window
 
 ### Repository Status
 - GitHub: Private (core team access only)
-- PyPI: **Public** — `pip install dct-toolkit` works
-- conda-forge: **Submitted** — PR #32930 in review at `conda-forge/staged-recipes`
-
-**Check conda-forge PR Status**:
-```bash
-gh pr view 32930 --repo conda-forge/staged-recipes
-# Or visit: https://github.com/conda-forge/staged-recipes/pull/32930
-```
+- PyPI: **Public** — `pip install dct-toolkit` works (v0.6.0 live)
+- conda-forge: **Approved & Merged** — Feedstock live at `conda-forge/dct-toolkit-feedstock`
 
 ### Current Version
 - `v0.6.0` — Support for anisotropic smoothing widths, per-axis Cartesian kernels,

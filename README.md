@@ -23,12 +23,10 @@ convolution/statistics surface.
 pip install dct-toolkit
 ```
 
-### conda (pending conda-forge approval)
-
-Conda-forge packaging has been submitted (PR under review). This option would be available soon:
+### conda
 
 ```bash
-conda install dct-toolkit
+conda install -c conda-forge dct-toolkit
 ```
 
 ## Quick Start
