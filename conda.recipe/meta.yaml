@@ -2,11 +2,11 @@
 
 package:
   name: dct-toolkit
-  version: 0.5.0
+  version: 0.6.0
 
 source:
-  url: https://pypi.org/packages/source/d/dct-toolkit/dct_toolkit-0.5.0.tar.gz
-  sha256: 9650850ae15600cef28b87350a7c80d61fd9f868a246f4727bc5959e4bb2e7d8
+  url: https://pypi.org/packages/source/d/dct-toolkit/dct_toolkit-0.6.0.tar.gz
+  sha256: 7b5975397b859f8af492f9b4c9fba470336225c0cf7fb3d2528d6ae4ed0ffcdd
 
 build:
   number: 0

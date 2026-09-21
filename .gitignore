@@ -57,3 +57,8 @@ site/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Local scratch / reference scripts
+.opencode/
+get_radar_smoothing.py
+radar_smoothing_ref.py

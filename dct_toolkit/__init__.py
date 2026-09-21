@@ -14,7 +14,7 @@ from .cartesian import smooth_cartesian
 from .polar import _azimuth_spacing_radians, smooth_polar
 from .stats import dct_count, dct_mean, dct_prefill, dct_std, dct_variance
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 
 __all__ = [

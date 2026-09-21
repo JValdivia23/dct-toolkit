@@ -1,9 +1,9 @@
 # AGENTS.md - DCT Toolkit Agent Guidelines
 
 **Project**: dct-toolkit  
-**Version**: 0.5.0  
-**Status**: Published — PyPI live, conda-forge PR under review  
-**Last Updated**: 2026-04-14
+**Version**: 0.6.0  
+**Status**: Preparing v0.6.0 release (PyPI & conda-forge)  
+**Last Updated**: 2026-09-21
 
 ---
 
@@ -423,9 +423,9 @@ gh pr view 32930 --repo conda-forge/staged-recipes
 ```
 
 ### Current Version
-- `v0.5.0` — N-D Cartesian smoothing backend upgrade (`dctn/idctn`) with
-  validated 3D/4D parity and stats compatibility.
-- Tag: `git checkout v0.5.0`
+- `v0.6.0` — Support for anisotropic smoothing widths, per-axis Cartesian kernels,
+  mixed polar kernels, periodic polar prefill, and effective density gating.
+- Tag: `git checkout v0.6.0`
 
 ### Gap-Filling Status
 - Code exists in `dct_toolkit/gap_filling.py` (available for import directly)
