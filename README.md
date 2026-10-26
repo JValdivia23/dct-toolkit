@@ -150,7 +150,89 @@ kernel string applies that kernel to every axis. Equal widths with different
 kernel types can still produce anisotropic smoothing. Legacy polar smoothing
 accepts a kernel pair, using the `(azimuth, range)` convention shown above.
 
-### 5) N-D Polar Geometry with Actual Coordinates (v1.0.0)
+### 5) N-D Polar Smoothing (v1.0.0)
+
+#### Which inputs are required?
+
+Use `coordinates="polar"` to select the polar backend and supply `axis_types`
+to enable explicit N-D geometry. You do **not** need to supply all three of
+`axis_types`, `axis_coords`, and `width_units` in every call:
+
+| Argument | Required for explicit N-D polar processing? |
+|----------|--------------------------------------------|
+| `axis_types` | **Yes:** one role per array axis, in array order. |
+| `axis_coords` | Only where physical width conversion or geometry dependencies need them. |
+| `width_units` | **No:** defaults to `"physical"`; use `"grid"` for widths in cells. |
+
+With `width_units="grid"`, no coordinate arrays are required. Physical filtering
+needs coordinates on selected, non-singleton axes. Physical angular filtering
+also needs actual positive range coordinates; physical azimuth filtering needs
+elevation coordinates when that role exists. These geometry dependencies remain
+required even when range/elevation are unfiltered. Coordinate entries for batch
+or unfiltered axes may otherwise be `None`; supplied coordinates are always
+validated.
+
+Omitting `axis_types` does **not** infer N-D geometry: it retains the legacy
+2D `(azimuth, range)` mode described above.
+
+#### Start with grid widths: no coordinates needed
+
+This self-contained example filters a `(time, elevation, azimuth, range)` array
+using widths in cells, with periodic azimuth and reflective boundaries elsewhere:
+
+```python
+import numpy as np
+import dct_toolkit as dct
+
+data = np.random.default_rng(42).standard_normal((3, 3, 36, 24))
+data[0, 1, :3, 8:12] = np.nan
+
+mean_grid = dct.dct_mean(
+    data,
+    width=(3.0, 3.0, 5.0, 7.0),             # time, elevation, azimuth, range cells
+    coordinates="polar",
+    axis_types=("time", "elevation", "azimuth", "range"),
+    width_units="grid",
+    boundary=("reflective", "reflective", "periodic", "reflective"),
+    restore_input_nan=False,                # retain supported estimates inside gaps
+)
+```
+
+By default, `dct_mean` restores input NaNs. Setting `restore_input_nan=False`
+keeps estimates in gaps where support exists; wholly missing independent domains
+still remain NaN. To keep time slices independent, add `filter_axes=(1, 2, 3)`.
+Still supply one positive width per array axis; the unfiltered time width is then
+an unused placeholder.
+
+#### How does this differ from Cartesian N-D?
+
+Both backends already handle N-dimensional arrays. The polar extension adds
+geometry and filtering controls, not just more dimensions:
+
+| Feature | Cartesian N-D | Explicit polar N-D |
+|---------|---------------|--------------------|
+| Axis roles | Not specified | Named roles in array order |
+| Width units | Grid cells | Grid or coordinate-based physical units |
+| Angular widths | No angular metric | Physical widths adapt with range/elevation |
+| Boundaries | Reflective on every axis | Reflective or periodic per axis |
+| Filtered axes | All axes | `filter_axes`; batch axes excluded |
+
+Cartesian calls need no axis metadata: `dct.dct_mean(data, width=(3, 3, 5, 7))`.
+Convert physical Cartesian widths to cells yourself using each axis's spacing.
+Polar physical angular widths additionally account for range and elevation, as
+shown below; they are distances, not degrees or radians.
+
+With grid widths, the same widths/kernels, every axis filtered, and all boundaries
+reflective, **finite-data smoothing matches Cartesian smoothing** up to numerical
+rounding. This equivalence concerns the smoothing operator, not nominal count
+conventions or missing-data fallback rules.
+
+The same polar geometry options work with `dct_smooth`, `dct_variance`, `dct_std`,
+`dct_count`, and `dct_prefill`. The low-level `smooth_polar` uses `width_pixels=`
+instead of `width=` and does not take `coordinates=`. See the
+[API reference](docs/API_REFERENCE.md#dct_toolkitpolar) for full syntax and validation.
+
+#### Physical widths with actual coordinates
 
 For a regular array in **(time, elevation, azimuth, range)** order:
 
