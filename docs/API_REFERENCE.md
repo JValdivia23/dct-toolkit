@@ -1,7 +1,7 @@
 # API Reference
 
-This reference documents the publication-focused public API surface
-(convolution + statistics).
+This reference targets **v1.0.0**, including the public smoothing/statistics API
+and the backward-compatible v0.6.0 legacy 2D polar interface.
 
 ## Core Primitives
 
@@ -31,15 +31,18 @@ Top-level convenience wrapper for Cartesian and polar smoothing.
 - `coordinates='cartesian'`: calls `smooth_cartesian(data, width, **kwargs)`.
 - `coordinates='polar'`: calls `smooth_polar(data, width_pixels=width, **kwargs)`.
 - Default kernel is `'gaussian'` unless `kernel_type` is explicitly provided.
-- For Cartesian data, `kernel_type` accepts a string or a sequence with one
-  supported kernel name per array axis, as documented for `smooth_cartesian`.
-  Polar data accepts a string or `(kernel_azimuth, kernel_range)` pair, as
-  documented for `smooth_polar`. The same kernels are used in prefill and
-  final smoothing.
+- Cartesian kernels follow `smooth_cartesian`. Legacy 2D polar calls accept a
+  string or `(kernel_azimuth, kernel_range)` pair. Explicit N-D polar calls accept
+  a string or one kernel per array axis, as documented below. The same kernels
+  and geometry are used in prefill and final smoothing.
 - If input contains NaNs, smoothing automatically runs a NaN-safe prefill step,
   applies spectral smoothing on the finite field, then restores the original NaN mask.
-- For polar input, `az_res_deg` must be a finite, positive real scalar. This
-  validation also applies when the input is entirely NaN.
+- All new polar arguments (`axis_types`, `axis_coords`, `boundary`, `width_units`,
+  `angle_units`, `filter_axes`) pass through `**kwargs` with `coordinates='polar'`.
+  `width` remains positional or keyword; the wrapper maps it to `width_pixels`.
+- Polar geometry is validated even on all-NaN input. Unfiltered/batch domains
+  never exchange support during prefill, smoothing, or fallback; wholly missing
+  independent domains remain missing without contaminating supported domains.
 - `prefill_max_iter=3` by default for predictable runtime.
 - `prefill_max_iter=None` means iterate prefill until convergence (or safety cap of 20).
 - Legacy alias: passing `max_iter=...` in kwargs is mapped to `prefill_max_iter`.
@@ -88,37 +91,46 @@ Physical widths must first be divided by the grid spacing along each axis.
 
 ### `dct_toolkit.polar`
 
-#### `smooth_polar(data, width_pixels, az_res_deg=1.0, az_boundary='reflective', range_boundary='reflective', kernel_type='gaussian')`
-Apply smoothing to 2D polar data (`n_azimuth`, `n_range`) with adaptive azimuth kernels.
+#### `smooth_polar`
 
-- `width_pixels` (`float` or `(width_azimuth, width_range)`): A scalar applies
-  equal nominal widths; a pair specifies independent widths. Values must be
-  finite and positive. At range index `r` (starting at 1), azimuth width is
-  `width_azimuth / (r * dtheta)` beams, with `dtheta` in radians; range width is
-  in range gates. Gaussian `sigma = effective_width / sqrt(12)` on either axis.
-- `az_res_deg`: A finite, positive real scalar in degrees. Python and NumPy
-  numeric scalars, including zero-dimensional numeric arrays, are accepted.
-  Zero, negative, nonfinite, complex, boolean, string, and nonscalar inputs
-  raise `ValueError`. The spacing must remain positive when converted to radians.
-- `az_boundary='reflective'`: DCT-based reflective boundary.
-- `az_boundary='periodic'`: real FFT periodic boundary (0/360 wrap).
-- `range_boundary`: currently `'reflective'`.
-- `kernel_type` (`str` or sequence of `str`): `'boxcar'`, `'boxcar_discrete'`,
-  or `'gaussian'`. A string applies to both dimensions; a 1-D list, tuple, or
-  NumPy array of length 2 selects `(kernel_azimuth, kernel_range)`. Kernel and
-  width pairs use the same order and can be specified independently.
-- All three kernels support reflective and periodic azimuth. Discrete boxcars
-  round the effective width to an integer, clamp it to at least 1, and increment
-  even sizes. In azimuth this conversion occurs separately at each range gate.
-  Periodic windows use circular averaging, including windows larger than a sweep.
-- Invalid kernel pair length, dimensionality, non-string entries, or unknown
-  names raise `ValueError`, using the same validation as Cartesian smoothing.
-- Filtering applies the adaptive azimuth operator first, then the range
-  operator. Reversing these operations generally changes the result because
-  the azimuth width varies with range. The polar backend accepts 2D data.
-- Input should be finite; `dct_mean` and `dct_smooth` handle NaNs.
+```python
+def smooth_polar(
+    data, width_pixels, az_res_deg=1.0, az_boundary="reflective",
+    range_boundary="reflective", kernel_type="gaussian", *,
+    axis_types=None, axis_coords=None, boundary=None,
+    width_units="physical", angle_units="degrees", filter_axes=None,
+):
+    ...
+```
 
-For data in **(azimuth, range)** order:
+The six existing positional arguments and `width_pixels` name are unchanged.
+The new arguments are keyword-only. Output has the same shape as input. The
+low-level smoother expects finite input; use `dct_mean` for normalized statistics
+on gaps, `dct_prefill` to fill them, or `dct_smooth` to prefill automatically and
+restore the original NaN mask.
+
+##### Compatibility mode: `axis_types=None`
+
+This is the existing 2D **(azimuth, range)** path, not inferred physical geometry.
+
+- `width_pixels` is a finite positive scalar or `(width_azimuth, width_range)`
+  pair. At range index `r=1,...,n_range`, the azimuth width in beams is
+  `width_azimuth / (r * dtheta)`; range width is in range gates. Actual first-gate
+  distance and elevation are not modeled.
+- `kernel_type` is a supported string or a length-2 sequence in `(azimuth, range)`
+  order. Supported names are `'boxcar'`, `'boxcar_discrete'`, and `'gaussian'`.
+- `az_res_deg` is a finite, positive real scalar in degrees and must stay positive
+  after conversion to radians. Python/NumPy numeric scalars and zero-dimensional
+  numeric arrays are accepted; boolean, complex, string, and nonscalar inputs
+  are rejected.
+- `az_boundary` is `'reflective'` (DCT) or `'periodic'` (RFFT).
+  `range_boundary` retains its existing reflective-only behavior.
+- Filtering applies adaptive azimuth first, then range. It preserves the v0.6.0
+  index-based units, even though the new `width_units` default is `'physical'`.
+  This default has no reinterpretation effect in compatibility mode.
+- Nondefault new geometry options require explicit `axis_types`: do not pass
+  coordinates, boundary overrides, filtering selection, or nondefault unit options
+  and expect the legacy path to infer their meaning.
 
 ```python
 import numpy as np
@@ -126,23 +138,110 @@ from dct_toolkit import dct_smooth
 
 radar_data = np.random.default_rng(42).standard_normal((360, 100))
 smoothed = dct_smooth(
-    radar_data,
-    coordinates="polar",
-    width=(5.0, 3.0),
-    kernel_type=("boxcar", "gaussian"),
-    az_res_deg=1.0,
-    az_boundary="periodic",
+    radar_data, (5.0, 3.0), coordinates="polar",
+    kernel_type=("boxcar", "gaussian"), az_res_deg=1.0, az_boundary="periodic",
 )
 ```
 
-`compute_polar_transfer_functions` and its compatibility alias
-`compute_polar_transfer_functions_v2` accept the same kernel pair. Their return
-values remain the adaptive azimuth transfer array and the range transfer vector.
+The module-level helpers `compute_polar_transfer_functions` and
+`compute_polar_transfer_functions_v2` remain legacy 2D interfaces: they accept the
+same kernel pair and return the adaptive azimuth transfer array and range
+transfer vector. They are not an N-D geometry construction API.
 
-**Behavior correction:** periodic azimuth with `'boxcar_discrete'` now uses the
-requested discrete boxcar. Earlier versions substituted a Gaussian in this
-branch. Existing single-string Gaussian and analytical boxcar calls retain
-their behavior.
+##### Explicit N-D geometry: `axis_types` supplied
+
+**Axis metadata and selection**
+
+- `axis_types`: a length-`data.ndim` sequence in **array axis order**. Roles are
+  `'azimuth'`, `'elevation'`, `'range'`, `'time'`, `'linear'`, `'cartesian'` (alias
+  of `'linear'`), and `'batch'`. There is at most one axis of each spherical role
+  (azimuth/elevation/range), with arbitrary extra time/linear/batch dimensions.
+- `axis_coords`: `None`, or a length-`ndim` sequence whose entries are `None` or
+  numeric 1D arrays of length `data.shape[axis]`. Every supplied array must be
+  finite, real, strictly increasing, and uniformly spaced. Singleton coordinate
+  arrays are allowed; explicit mode rejects zero-length array axes. Elevation
+  coordinates must lie in `[-90, 90]` degrees or `[-pi/2, pi/2]` radians.
+  Supply actual coordinates wherever a physical conversion or its geometry
+  dependencies require them; `None` is not a substitute for actual range/elevation
+  in a physical angular filter. All supplied coordinates are validated, including
+  those on unfiltered axes.
+  Integer coordinate spacings are checked before floating-point conversion, so
+  a large integer time origin does not destroy otherwise regular sampling.
+  Floating coordinates use at least `float64` precision for spacing checks,
+  preventing low-precision subtraction from overflowing or hiding irregularity.
+- `filter_axes=None`: filter every non-batch axis. An explicit sequence of axis
+  indices selects only those axes; negative indices are supported and duplicates
+  are invalid. Indices are array axes, not role-order positions or a requested
+  filter order. An empty sequence selects no axes (identity smoothing, no
+  inter-cell filling). Selecting a `'batch'` axis is invalid.
+  Unselected axes remain independent domains, including in **all** iterative
+  filling, nearest-neighbor propagation, and low-support fallbacks. A wholly
+  missing independent domain cannot borrow support from another one.
+
+**Widths, kernels, units, and boundaries**
+
+- `width_pixels`: despite its retained compatibility name, it follows
+  `width_units` in explicit mode. A finite positive scalar broadcasts; a 1D
+  sequence must contain one finite positive width per array axis, including
+  placeholders for batch/unfiltered axes.
+- `kernel_type`: one supported kernel string or a length-`ndim` sequence.
+  Each selected axis uses its own kernel, independently of width/boundary choice.
+  Gaussian `sigma = effective_grid_width / sqrt(12)`. Discrete boxcars round
+  effective grid width to an integer, clamp to at least 1, and increment even
+  sizes to obtain an odd window, locally where geometry changes the width.
+- `width_units='physical'`: a string broadcasts, or a length-`ndim` sequence
+  selects `'physical'` or `'grid'` independently per axis. `'grid'` means literal
+  grid cells on that axis; it disables angular distance conversion for that axis.
+  Physical time/linear/range widths use that axis's coordinate units and are
+  divided by its coordinate spacing. Physical angular widths are **distances in
+  the range coordinate's units**, not angular coordinate units.
+- `angle_units='degrees'`: a single global string, `'degrees'` or `'radians'`,
+  describes all angular coordinate arrays. Angular spacings and elevations are
+  converted to radians internally. This is not a per-axis sequence.
+  `az_res_deg` is a legacy option, not a substitute for explicit coordinates.
+- `boundary=None`: inherit `az_boundary` for the azimuth role and `range_boundary`
+  for range; other roles default to reflective. An explicit string broadcasts, or
+  a length-`ndim` sequence selects `'reflective'` (DCT-II) or `'periodic'` (RFFT)
+  per axis, overriding inherited choices. Unlike legacy mode, explicit mode can
+  select a periodic range/time/linear/elevation axis as well as periodic azimuth.
+  The user is responsible for whether that periodic model is appropriate.
+- All per-axis sequences follow **array order**, including widths, kernels,
+  boundaries, and width units. Reorder all of them, plus metadata and selected
+  axis indices, when transposing data.
+- Singleton axes are identity operations and have nominal support width 1;
+  batch/unfiltered axes contribute no support-area factor.
+
+For physical azimuth/elevation filtering, the effective grid widths are
+
+```text
+w_az(R, el) = L_az / (R * cos(el) * delta_az)
+w_el(R)     = L_el / (R * delta_el)
+```
+
+Here `R` is the actual range coordinate, and angular quantities are in radians.
+If no elevation axis is present, `cos(el)=1`. A non-singleton physical angular
+filter requires a range axis with actual positive coordinates and the relevant
+angular coordinates. Physical azimuth also needs elevation coordinates if that
+role exists, even if elevation is unfiltered. The actual first range gate is
+honored. Origins and poles that make the conversion singular are rejected rather than silently
+replaced or capped. Non-singleton physical periodic azimuth filtering requires
+`n_azimuth * delta_az = 2*pi`: a complete circle with no duplicate endpoint.
+Reflective azimuth can represent a regular sector instead.
+
+**Operator order and limitations**
+
+Selected filters run in canonical **azimuth, elevation, range, time, linear**
+order, independent of array storage order. Geometry-dependent angular filters
+are applied on their local range/elevation slices. This generally nonseparable,
+noncommuting composition is not an exact isotropic Cartesian/geodesic convolution
+or a cell-volume-weighted average. Coordinates must describe a regular tensor
+grid, not an irregular concatenation of radar sweeps. The API does not resample
+irregular coordinates or perform geodesic/beam-volume integration.
+
+See [`examples/nd_polar.py`](../examples/nd_polar.py) for a runnable synthetic
+`(time, elevation, azimuth, range)` example with physical widths, mixed kernels,
+independent boundaries, missing data, axis permutation, and unfiltered time
+domains. Only NumPy/SciPy and this package are needed.
 
 ---
 
@@ -150,99 +249,140 @@ their behavior.
 
 ### `dct_toolkit.stats`
 
-All statistical functions use normalized convolution and support NaN-containing inputs.
+All functions below accept positional or keyword `width`. Cartesian widths and
+kernels follow `smooth_cartesian`; legacy polar scalar/pair conventions follow
+the compatibility path above. With `coordinates='polar'`, **all** statistics,
+including `dct_count` and `dct_prefill`, forward the new geometry arguments through
+`**kwargs`. Explicit N-D widths/kernels follow array order. Validation also applies
+to all-NaN inputs and prefill calls with no targets.
 
-For Cartesian coordinates, all functions below accept `kernel_type` through
-`**kwargs` as a single string or a length-`data.ndim` sequence (`mask.ndim` for
-`dct_count`), using the same axis order and width conventions as
-`smooth_cartesian`. This includes `dct_prefill`. The default is `'gaussian'`.
-For polar coordinates, `kernel_type` accepts a string or a pair in
-`(azimuth, range)` order, with the width conventions of `smooth_polar`.
-All polar statistics require the same finite, positive scalar `az_res_deg` as
-`smooth_polar`; `dct_count` uses the same validated spacing for its window area.
-Validation also applies to all-NaN input and prefill calls with no targets.
+Let `S` be the complete selected smoothing operator and `m` the validity mask.
+Invalid samples are zero-filled before filtering. Both numerator and mask pass
+through **all** filters before a single division: `S(m*x)/S(m)`. Normalizing
+separately after each axis is not the same operation. Both variance moments,
+prefill, and density diagnostics use the same geometry, kernels, boundaries, and
+canonical filter order. Unfiltered/batch dimensions never contribute support or
+exchange values, even during fallback.
 
-Mixed-kernel means apply the complete smoothing operator to both the zero-filled
-data and validity mask before dividing. Variance uses that same kernel for both
-moments; prefill and density thresholds also use the requested kernels.
-For polar data this includes the same azimuth-then-range order in every pass.
-`dct_count` retains the convention `clip(smooth(mask), 0, 1) * prod(widths)` for
-Cartesian data; this is an effective window count, including for Gaussian or
-mixed kernels, rather than a literal number of neighbors in a finite kernel.
-Polar counts retain the corresponding range-dependent factor
-`width_range * width_azimuth / (r * dtheta)`.
+The mask response `S(m)` is a support-density diagnostic, not statistical ESS.
+Nonnegative spatial weights imply a response in `[0, 1]`; arbitrary fractional
+spectral kernels need not have nonnegative spatial weights and may overshoot.
+`dct_count` explicitly clips its density. Do not assume positivity merely from
+the kernel name or from a nonnegative spectral response.
 
-For heavily gapped fields, statistical functions include internal stability
-fallbacks to avoid unstable normalized-convolution ratios in poorly supported
-regions.
+#### `dct_count(mask, width, coordinates='cartesian', restore_input_nan=True, **kwargs)`
 
-#### `dct_count(mask, width, coordinates='cartesian', **kwargs)`
-Compute effective local sample count.
+Report **nominal weighted support**, retaining the existing API name:
 
-- `width` (`float` or sequence): Scalar = equal widths, sequence = per-axis widths.
-- Density is clipped to `[0, 1]` to keep counts physically valid.
-- `restore_input_nan=True` by default masks output where input `mask` is False.
+```text
+count(i) = clip(S(mask)(i), 0, 1) * A(i)
+```
 
-#### `dct_mean(data, width, coordinates='cartesian', mask=None, min_effective_density=None, **kwargs)`
-Compute robust local mean:
+- `mask` is a boolean/binary validity array. `restore_input_nan=True` sets output
+  to NaN where it is False; set it to False to inspect support at missing cells.
+- Cartesian `A` is `prod(widths)`, preserving the existing convention. Legacy
+  polar `A(r)` is `width_range * width_azimuth / (r * dtheta)` with `r` starting at 1.
+- Explicit N-D polar `A(i)` is the product of the local effective grid widths on
+  **filtered axes only**. Singleton axes contribute 1; batch/unfiltered axes
+  contribute no factor. Angular widths can depend on range and elevation.
+- The nominal factor is not replaced with the discrete-boxcar rounded window
+  length or a Gaussian statistical-ESS factor. It is not a literal count of
+  distinct neighbors, a physical area/volume, or a cell-volume quadrature weight.
+  Reflective boundaries and oversized circular windows can revisit samples.
+- The explicit count factor is computed only when requested. If its final product
+  cannot be represented as a finite positive `float64`, `dct_count` raises
+  `ValueError`. Smoothing and normalized moments do not require that product;
+  their individual effective widths must still be finite and positive.
+- For independent samples with combined spatial weights `q_j`, statistical ESS
+  would instead use `(sum(q_j))**2 / sum(q_j**2)`. Repeated visits to the same
+  sample must be combined before squaring. `dct_count` does not compute this.
 
-`mu = smooth(data * mask) / smooth(mask)`
+#### `dct_mean`
 
-- Returns floating-point output.
-- `width` (`float` or sequence): Scalar = equal widths, sequence = per-axis widths.
-- If `mask` is provided, it must match `data.shape`.
-- In low-support regions, an internal prefill-and-smooth fallback is used to
-  keep results finite and stable when support exists. The denominator threshold
-  is `1e-3` (internal constant `_MEAN_DENOMINATOR_FLOOR`).
-- `restore_input_nan=True` by default masks output where input support is invalid.
-- `min_effective_density=None` (default) keeps the legacy behavior. When set
-  (e.g. `0.35`), the final output is set to NaN wherever the local
-  valid-sample density `smooth(mask)` is below this threshold. The threshold
-  is dimensionless (in `[0, 1]`) and works uniformly for Cartesian and polar
-  coordinates. This is the same density signal that `dct_count / area`
-  represents internally.
+```python
+dct_mean(data, width, coordinates="cartesian", mask=None,
+         restore_input_nan=True, min_effective_density=None, **kwargs)
+```
 
-#### `dct_prefill(data, width, coordinates='cartesian', fill_mask=None, max_iter=3, min_effective_density=0.35, **kwargs)`
-Fill gaps using iterative normalized convolution based on `dct_mean`.
+- Returns floating-point output. `mask`, when supplied, must match `data.shape`;
+  only entries both masked valid and finite contribute. Otherwise finite input
+  defines validity.
+- The normal public ratio path requires a **finite denominator strictly greater
+  than `1e-3`** (`_MEAN_DENOMINATOR_FLOOR`). No additive epsilon is used.
+- At unsupported/poorly conditioned positions, the existing stability fallback
+  prefills the field and smooths it. Support must exist in the same independent
+  filtered domain; wholly missing domains remain NaN.
+- `restore_input_nan=True` masks output at invalid input support. Set it to False
+  to retain estimates in gaps, without permitting cross-domain borrowing.
+- `min_effective_density=None` retains the default stability behavior. A positive
+  threshold, typically in `[0, 1]`, discards results where the original `S(m)` is
+  below it, **after** fallback. This is a dimensionless support-density gate,
+  not an ESS threshold. It does not turn the fallback into a ratio estimator.
 
-- `width` (`float` or sequence): Scalar = equal widths, sequence = per-axis widths.
-- `fill_mask` uses `True = fill this position`.
-- If `fill_mask` is None, NaN positions are filled.
-- Preserves non-target values exactly.
-- Intended as a pre-processing step before full-field smoothing.
-- `max_iter=3` by default for predictable runtime.
-- `max_iter=None` runs until convergence with safety cap `20`; fixed integer values
-  stop early once no NaNs remain.
-- Any unresolved targets after iterations are filled with nearest-neighbor fallback
-  to guarantee finite outputs when at least one finite value exists.
-- Polar nearest-neighbor propagation tries range first, then azimuth. With
-  `az_boundary='periodic'`, azimuth neighbors wrap across the first/last beam,
-  including in the global fallback. Range distances remain nonperiodic.
-  During the azimuth pass, equidistant neighbors prefer the preceding beam
-  around the circle. Reflective azimuth uses ordinary index distances.
-- `min_effective_density=0.35` (default) gates per-iteration mean estimates by
-  the local valid-sample density `smooth(mask)`. Cells whose local density is
-  below the threshold are left as NaN for that iteration and may be filled in
-  a later iteration as the valid mask grows. This stabilizes the iterative
-  prefill in low-support regions and uses the same density signal as
-  `dct_count / area`. Set to `None` or a non-positive value to disable the
-  gate and reproduce the legacy un-gated behavior.
+#### `dct_prefill`
 
-#### `dct_variance(data, width, coordinates='cartesian', mask=None, **kwargs)`
-Compute robust local variance:
+```python
+dct_prefill(data, width, coordinates="cartesian", fill_mask=None,
+            max_iter=3, min_effective_density=0.35, **kwargs)
+```
 
-`Var = E[X^2] - (E[X])^2`
+- Iteratively fills gaps using normalized-convolution estimates; non-target
+  values are preserved exactly. `fill_mask` uses `True = fill/replace here`;
+  without it, NaN positions are targets. If a finite targeted value cannot be
+  estimated, its original value is retained.
+- `max_iter=3` is the default; `None` runs until convergence or a safety cap of
+  20 iterations. Iteration can stop early when no targets remain or no progress
+  can be made.
+- `min_effective_density=0.35` gates iterative estimates using local mask
+  response; accepted iterative candidates must exceed the clipped-density
+  threshold. Set it to `None` or a non-positive value to disable this gate.
+  Residual nearest-neighbor fill is a separate fallback, not a guarantee that
+  every returned value passed the iterative density gate.
+- Residual targets use nearest-neighbor propagation within their selected
+  filtered domain. A finite output is possible only where that domain has
+  support; an all-missing independent domain stays missing.
+- Legacy polar propagation tries range before azimuth. Periodic azimuth wraps
+  index distances across the seam in both axis-wise and global fallback;
+  equidistant axis-wise azimuth neighbors prefer the preceding beam.
+- Explicit geometry honors selected axes and their reflective/periodic
+  boundaries in fallback as well. Nearest-neighbor fallback is an index-space
+  filling rule, not physical-distance/geodesic interpolation. It cannot use an
+  unfiltered time/elevation/range/batch axis as a bridge to another domain.
+- Explicit fallback retains range-first and other unique-role axis passes.
+  Repeated active time/linear roles skip individual passes; residual targets use
+  simultaneous mixed-boundary nearest completion. Exact global ties average all
+  nearest seeds after the retained passes, without using newly completed global
+  targets as donors. This avoids layout-dependent results for repeated roles;
+  legacy 2D nearest-neighbor rules are unchanged.
 
-- `restore_input_nan=True` by default masks output where input support is invalid.
-- `width` (`float` or sequence): Scalar = equal widths, sequence = per-axis widths.
+#### `dct_variance`
 
-#### `dct_std(data, width, coordinates='cartesian', mask=None, **kwargs)`
-Compute robust local standard deviation:
+```python
+dct_variance(data, width, coordinates="cartesian", mask=None,
+             restore_input_nan=True, **kwargs)
+```
 
-`Std = sqrt(Var)`
+Compute `max(0, E[x**2] - E[x]**2)` from independent normalized first and second
+moments using the same complete `S`. The second moment is `S(m*x**2)/S(m)`, not
+the square of a smoothed/prefilled field. Where fallback is needed, `x` and
+`x**2` are **prefilled separately** before smoothing. `mask` follows `dct_mean`;
+`restore_input_nan=True` masks invalid input support. Additional mean options,
+including the density gate, pass to both moments.
 
-- `restore_input_nan=True` by default masks output where input support is invalid.
-- `width` (`float` or sequence): Scalar = equal widths, sequence = per-axis widths.
+This is a weighted population-moment estimate, not a Bessel-corrected unbiased
+sample variance. Nonnegative-weight variance guarantees apply only when the
+actual spatial weights are nonnegative. Clamping does not make an arbitrary
+signed-weight spectral estimator a probability-weighted variance.
+
+#### `dct_std`
+
+```python
+dct_std(data, width, coordinates="cartesian", mask=None,
+        restore_input_nan=True, **kwargs)
+```
+
+Return `sqrt(dct_variance(...))`, with the same mask, geometry, fallback, and
+restoration conventions.
 
 ---
 
@@ -267,7 +407,7 @@ All high-level functions below support `coordinates='cartesian'` or
                         v                                         v
             +---------------------------+             +---------------------------+
             | smooth_cartesian          |             | smooth_polar              |
-            | (N-D Cartesian smoother)  |             | (2D polar smoother)       |
+            | (N-D Cartesian smoother)  |             | (N-D / legacy 2D polar)   |
             +-------------+-------------+             +-------------+-------------+
                           |                                         |
                           +--------------------+--------------------+
@@ -288,8 +428,8 @@ All high-level functions below support `coordinates='cartesian'` or
                                    (smooth again, restore NaN mask)
 
 
-    +--------------------+    uses smooth_* on mask and scales by area
-    | dct_count          |-----------------------------------------------> output count
+    +--------------------+    clips smooth(mask), scales by nominal support
+    | dct_count          |-----------------------------------------------> output support
     +--------------------+
 
     +--------------------+    normalized convolution: smooth(x*mask)/smooth(mask)
@@ -298,7 +438,7 @@ All high-level functions below support `coordinates='cartesian'` or
               |
               +--> internal low-support fallback may call dct_prefill
 
-    +--------------------+    calls dct_mean twice: E[x] and E[x^2]
+    +--------------------+    independent E[x], E[x^2], then clamp
     | dct_variance       |-----------------------------------------------> output variance
     +---------+----------+
               |
@@ -313,10 +453,10 @@ All high-level functions below support `coordinates='cartesian'` or
 - `get_dct_transfer_function`: Build 1D spectral kernel `H[k]` from width and kernel type.
 - `dct_convolve_1d`: Apply one 1D DCT convolution along one axis using a precomputed `H`.
 - `smooth_cartesian`: Low-level separable smoothing for N-D Cartesian arrays.
-- `smooth_polar`: Low-level smoothing for 2D polar arrays with adaptive azimuth width.
+- `smooth_polar`: Low-level explicit N-D geometry or compatible legacy 2D polar smoothing.
 - `dct_smooth`: Top-level "just smooth this" wrapper (auto-pre-fills NaNs, then restores NaN mask).
 - `dct_mean`: NaN-robust local mean via normalized convolution.
-- `dct_count`: Effective local sample count from a validity mask.
+- `dct_count`: Nominal weighted support from a validity mask, not statistical ESS.
 - `dct_prefill`: Iterative normalized-convolution gap fill (often used before full-field smoothing).
 - `dct_variance`: NaN-robust local variance from normalized-convolution moments.
 - `dct_std`: NaN-robust local standard deviation (`sqrt(dct_variance)`).
@@ -325,5 +465,8 @@ All high-level functions below support `coordinates='cartesian'` or
 
 ## Scope Note
 
-Gap-filling methods are intentionally excluded from this public API reference for the
-initial stats-first release track.
+`dct_prefill` is public. The separate spectral-inpainting/diffusion algorithms in
+[`dct_toolkit/gap_filling.py`](../dct_toolkit/gap_filling.py) remain
+research-internal, are not exported by the top-level API, and do not inherit this
+N-D geometry contract. Their module/function docstrings are the local reference;
+the old gap-filling basis document is not present in this repository.

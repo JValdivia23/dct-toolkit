@@ -11,10 +11,19 @@ import numpy as np
 from .core import dct_convolve_1d, get_dct_transfer_function
 from ._widths import WidthLike
 from .cartesian import smooth_cartesian
-from .polar import _azimuth_spacing_radians, smooth_polar
-from .stats import dct_count, dct_mean, dct_prefill, dct_std, dct_variance
+from .polar import smooth_polar
+from .stats import (
+    _resolve_smoothing_geometry,
+    _smooth_completed_field,
+    _smoothing_kwargs,
+    dct_count,
+    dct_mean,
+    dct_prefill,
+    dct_std,
+    dct_variance,
+)
 
-__version__ = "0.6.0"
+__version__ = "1.0.0"
 
 
 __all__ = [
@@ -50,6 +59,8 @@ def dct_smooth(
         Smoothing width. A scalar applies the same width to every axis.
         A sequence allows per-axis widths. Cartesian widths are in grid cells
         and follow array axis order; Gaussian ``sigma = width / sqrt(12)``.
+        Explicit N-D polar widths also follow array order, with units set by
+        ``width_units``. Legacy polar calls use (azimuth, range) widths.
     coordinates : str, default='cartesian'
         'cartesian' or 'polar'.
     prefill_max_iter : int or None, default=3
@@ -60,31 +71,39 @@ def dct_smooth(
         Additional arguments (kernel_type, az_res_deg, etc.). For Cartesian
         data, ``kernel_type`` accepts a string or a sequence of supported
         kernel names with length ``data.ndim``, in array axis order.
-        Polar data accepts a string or ``(kernel_azimuth, kernel_range)`` pair.
-        Polar ``az_res_deg`` must be a finite, positive real scalar.
-        The same kernels are used for prefill and final smoothing.
-        The default is 'gaussian'.
+        Explicit polar geometry accepts ``axis_types``, ``axis_coords``,
+        ``boundary``, ``width_units='physical'``, ``angle_units='degrees'``,
+        and ``filter_axes``. Per-axis widths, kernels, boundaries, and units
+        follow array axis order. Unfiltered axes are isolated domains, including
+        geometry axes; all-missing domains remain NaN without affecting others.
+        Legacy polar data accepts a string or an (azimuth, range) kernel pair,
+        and ``az_res_deg`` must be a finite, positive real scalar.
+        Geometry and kernels are validated even for all-NaN inputs. The same
+        operator is used for prefill and final smoothing. Default kernel is
+        'gaussian'. ``min_effective_density`` and private mean controls apply
+        to prefill only and are not passed to the low-level smoother.
 
     Returns
     -------
     smoothed : np.ndarray
-        Smoothed data.
+        Smoothed data with the input shape, including a zero-dimensional array
+        for scalar input.
     """
     data_array = np.asarray(data)
     nan_mask = np.isnan(data_array)
-    if coordinates == "polar":
-        _azimuth_spacing_radians(kwargs.get("az_res_deg", 1.0))
 
     # Support legacy alias in wrapper calls.
     if "max_iter" in kwargs:
         prefill_max_iter = kwargs.pop("max_iter")
 
+    smooth_kwargs = _smoothing_kwargs(kwargs)
+    smooth_kwargs.pop("min_effective_density", None)
+    geometry = _resolve_smoothing_geometry(data_array.shape, width, coordinates, **smooth_kwargs)
+
     if not np.any(nan_mask):
-        if coordinates == "cartesian":
-            return smooth_cartesian(data_array, width, **kwargs)
-        if coordinates == "polar":
-            return smooth_polar(data_array, width_pixels=width, **kwargs)
-        raise ValueError(f"Unknown coordinates: {coordinates}")
+        return _smooth_completed_field(
+            data_array, width, coordinates, geometry=geometry, **smooth_kwargs
+        )
 
     # No support exists to estimate an all-NaN field; preserve mask semantics.
     if np.all(nan_mask):
@@ -98,12 +117,9 @@ def dct_smooth(
         **kwargs,
     )
 
-    if coordinates == "cartesian":
-        smoothed = smooth_cartesian(filled, width, **kwargs)
-    elif coordinates == "polar":
-        smoothed = smooth_polar(filled, width_pixels=width, **kwargs)
-    else:
-        raise ValueError(f"Unknown coordinates: {coordinates}")
+    smoothed = _smooth_completed_field(
+        filled, width, coordinates, geometry=geometry, **smooth_kwargs
+    )
 
     smoothed[nan_mask] = np.nan
     return smoothed

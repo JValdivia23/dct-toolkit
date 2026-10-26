@@ -1,38 +1,27 @@
 """
-2D Polarimetric Smoothing.
+Geometry-aware polar smoothing with a backward-compatible 2-D interface.
 
-This module provides smoothing for polar coordinate data (Azimuth x Range).
-It handles the non-uniform physical width of azimuth beams by adapting
-the smoothing kernel in the spectral domain.
+Explicit N-D geometry adapts angular smoothing to actual range and elevation
+coordinates. Without explicit axis roles, the original azimuth-by-range,
+range-index-based filtering convention is retained.
 """
 
 import warnings
-from typing import Tuple
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
 import scipy.fft
 
+from ._geometry import (
+    AxisCoordinates,
+    AxisStrings,
+    GridWidth,
+    _azimuth_spacing_radians,
+    _resolve_polar_geometry,
+)
 from ._kernels import KernelLike, normalize_kernel_types
 from ._widths import WidthLike, normalize_widths
 from .core import get_dct_transfer_function
-
-
-def _azimuth_spacing_radians(az_res_deg: float) -> float:
-    """Validate a positive real scalar azimuth spacing and convert it to radians."""
-    message = "az_res_deg must be a finite, positive real scalar"
-    try:
-        value = np.asarray(az_res_deg)
-        if value.ndim != 0 or value.dtype.kind not in "iuf":
-            raise ValueError(message)
-        degrees = float(value)
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise ValueError(message) from exc
-    if not np.isfinite(degrees) or degrees <= 0:
-        raise ValueError(message)
-    radians = float(np.deg2rad(degrees))
-    if radians == 0:
-        raise ValueError(f"{message}; spacing is too small to represent in radians")
-    return radians
 
 
 def compute_polar_transfer_functions(
@@ -45,8 +34,9 @@ def compute_polar_transfer_functions(
     """
     Compute transfer functions for polar smoothing.
 
-    The azimuth kernel width adapts with range to maintain constant physical
-    width.
+    The azimuth width adapts with the index radius ``r = j + 1``. Its nominal
+    physical-width interpretation is limited to that legacy convention; this
+    helper does not accept actual range offsets or elevation coordinates.
 
     Parameters
     ----------
@@ -185,6 +175,61 @@ def compute_polar_transfer_functions_v2(
     )
 
 
+def _polar_axis_transfer_function(
+    shape: Tuple[int, ...],
+    axis: int,
+    width: GridWidth,
+    kernel_type: str,
+    boundary: str,
+) -> np.ndarray:
+    """Build a compact response for one explicit-geometry filtering pass.
+
+    Parameters
+    ----------
+    shape : tuple of int
+        Data dimensions.
+    axis : int
+        Filtering axis; widths must not vary along this dimension.
+    width : float or ndarray
+        Resolved grid widths, broadcastable to the data.
+    kernel_type : str
+        Validated kernel name.
+    boundary : str
+        ``reflective`` for DCT-II or ``periodic`` for RFFT.
+
+    Returns
+    -------
+    ndarray
+        Response varying only along frequency and geometry-dependent axes.
+        Its DC component is exactly one at every geometry location.
+    """
+    n_axis = shape[axis]
+    periodic = boundary == "periodic"
+    n_freq = n_axis // 2 + 1 if periodic else n_axis
+    frequency_shape = [1] * len(shape)
+    frequency_shape[axis] = n_freq
+    k = np.arange(n_freq).reshape(frequency_shape)
+    theta = np.pi * k / (n_axis if periodic else 2 * n_axis)
+    widths = np.asarray(width, dtype=float)
+    if kernel_type == "gaussian":
+        with np.errstate(over="ignore", under="ignore"):
+            response = np.exp(-0.5 * (2 * theta * (widths / np.sqrt(12))) ** 2)
+    else:
+        if kernel_type == "boxcar_discrete":
+            widths = np.maximum(1.0, np.rint(widths))
+            widths = widths + (np.remainder(widths, 2) == 0)
+        # All sampled phases repeat after 2*N (periodic) or 4*N (DCT)
+        # width units. Reducing the numerator avoids overflow and preserves
+        # multi-wrap windows without a loop over discrete boxcar neighbors.
+        phase_width = np.remainder(widths, (2 if periodic else 4) * n_axis)
+        response = np.sinc(phase_width * (theta / np.pi)) / np.sinc(theta / np.pi)
+        response = response * (phase_width / widths)
+    dc = [slice(None)] * len(shape)
+    dc[axis] = 0
+    response[tuple(dc)] = 1.0
+    return response
+
+
 def smooth_polar(
     data: np.ndarray,
     width_pixels: WidthLike,
@@ -192,28 +237,70 @@ def smooth_polar(
     az_boundary: str = "reflective",
     range_boundary: str = "reflective",
     kernel_type: KernelLike = "gaussian",
+    *,
+    axis_types: Optional[Sequence[str]] = None,
+    axis_coords: Optional[AxisCoordinates] = None,
+    boundary: Optional[AxisStrings] = None,
+    width_units: AxisStrings = "physical",
+    angle_units: str = "degrees",
+    filter_axes: Optional[Sequence[int]] = None,
 ) -> np.ndarray:
     """
-    Apply smoothing to 2D polar data (Azimuth x Range).
+    Apply legacy 2-D polar smoothing or explicit geometry-aware N-D filtering.
 
     Parameters
     ----------
     data : np.ndarray
-        Input array of shape (n_azimuth, n_range).
+        Input array. Without ``axis_types``, shape must be (n_azimuth, n_range).
     width_pixels : float or sequence of float
-        Width specification in pixels as ``(width_azimuth, width_range)``.
-        A scalar applies equal nominal widths. Azimuth width adapts with
-        range; see ``compute_polar_transfer_functions`` for units and scaling.
+        Positive scalar or widths in array axis order. Legacy pairs are
+        ``(width_azimuth, width_range)`` and retain index-based scaling; see
+        ``compute_polar_transfer_functions``. Explicit geometry interprets
+        widths according to ``width_units``.
     az_res_deg : float
-        Azimuth resolution in degrees, as a finite, positive real scalar.
+        Legacy azimuth resolution in degrees, as a finite, positive real
+        scalar. Explicit geometry uses ``axis_coords`` instead.
     az_boundary : str
         'reflective' (default) or 'periodic'.
     range_boundary : str
-        'reflective' (default).
+        Legacy mode supports only 'reflective'. Explicit geometry also
+        supports 'periodic', unless overridden by ``boundary``.
     kernel_type : str or sequence of str, default='gaussian'
-        'boxcar', 'boxcar_discrete', or 'gaussian'. A string applies to both
-        dimensions. A pair selects ``(kernel_azimuth, kernel_range)``,
-        independently of whether ``width_pixels`` is scalar or a pair.
+        'boxcar', 'boxcar_discrete', or 'gaussian'. A string applies to every
+        axis. A sequence selects one kernel per array axis.
+    axis_types : sequence of str or None, optional
+        Flat sequence of one role per axis: ``azimuth``, ``elevation``,
+        ``range``, ``time``, ``linear`` (alias ``cartesian``), or ``batch``.
+        Azimuth, elevation, and range may each occur at most once. None
+        preserves the legacy 2-D convention exactly.
+    axis_coords : sequence or None, optional
+        One finite real coordinate vector or None per axis. Supplied vectors
+        must match axis length, be strictly increasing, and have uniform
+        spacing (relative tolerance 1e-6). Physical active nonsingleton axes
+        require coordinates, as do range/elevation dependencies of physical
+        angular axes. Actual coordinate values, not gate indices, determine
+        angular conversion. Selected nonsingleton physical angular filters
+        require strictly positive range coordinates; range-only filtering
+        may start at zero.
+    boundary : str or sequence of str or None, optional
+        ``reflective`` (DCT-II) or ``periodic`` (RFFT), in array order. A
+        string broadcasts. None uses ``az_boundary`` for azimuth,
+        ``range_boundary`` for range, and reflective for other axes.
+    width_units : str or sequence of str, default='physical'
+        ``grid`` uses literal index widths. ``physical`` divides linear,
+        time, and range widths by coordinate spacing. Angular widths become
+        ``L / (R*cos(elevation)*daz)`` for azimuth and ``L / (R*del)`` for
+        elevation, with angular steps in radians. Without elevation, cos=1.
+        Angular physical widths L are distances in the range coordinate's
+        units, not degrees or radians.
+        Singleton axes are identity filters with effective width one.
+    angle_units : str, default='degrees'
+        Global angular coordinate units: ``degrees`` or ``radians``.
+        Elevation must lie within [-90, 90] degrees or [-pi/2, pi/2] radians.
+    filter_axes : sequence of int or None, optional
+        Exact axes to filter, with negative indices accepted. None filters all
+        nonbatch axes; an empty sequence is identity. Duplicate or batch
+        entries are invalid. Unfiltered geometry axes retain their roles.
 
     Returns
     -------
@@ -223,18 +310,29 @@ def smooth_polar(
     Raises
     ------
     ValueError
-        If data is not 2D, the kernel specification is invalid, or the
-        azimuth boundary is unknown, or ``az_res_deg`` is not a finite,
-        positive real scalar.
+        If geometry or filter metadata are invalid, physical angular range
+        coordinates are nonpositive, azimuth geometry is singular near a
+        pole, or physical periodic azimuth does not cover one full circle
+        without a duplicate endpoint. New geometry options require
+        ``axis_types``; nondefault options are never silently ignored.
     NotImplementedError
-        If the range boundary is not 'reflective'.
+        If the legacy range boundary is not 'reflective'.
 
     Notes
     -----
-    Smoothing applies the range-adaptive azimuth filter first, then the range
-    filter. Reversing this order generally changes the result. All three
-    kernels support both azimuth boundary modes. Input should be finite;
-    use ``dct_mean`` or ``dct_smooth`` for data containing NaNs.
+    Filtering order is azimuth, elevation, range, time, then generic linear
+    axes, regardless of array placement. Axes with the same independent role
+    retain array order. Reversing dependent filters generally changes the
+    result. Batch axes are never filtered. The operator does not normalize
+    masked moments; use ``dct_mean`` for normalized convolution with gaps or
+    ``dct_smooth`` for automatic prefill. All three kernels support either
+    boundary on each explicit axis. Widths are not capped at the axis length.
+    Origin/pole checks concern selected nonsingleton physical angular filters:
+    both angular conversions require positive ranges; only physical azimuth
+    conversion rejects near-pole elevation where cos(elevation) <= 1e-12.
+    Grid, unfiltered, and singleton angular axes skip their own conversion,
+    but their coordinates are still required if another selected filter
+    depends on them.
 
     Examples
     --------
@@ -248,6 +346,41 @@ def smooth_polar(
     >>> np.allclose(smoothed, data)
     True
     """
+    geometry = _resolve_polar_geometry(
+        data.shape,
+        width_pixels,
+        kernel_type=kernel_type,
+        az_res_deg=az_res_deg,
+        az_boundary=az_boundary,
+        range_boundary=range_boundary,
+        axis_types=axis_types,
+        axis_coords=axis_coords,
+        boundary=boundary,
+        width_units=width_units,
+        angle_units=angle_units,
+        filter_axes=filter_axes,
+    )
+    if not geometry.legacy:
+        result = np.array(data, dtype=np.result_type(data.dtype, np.float64), copy=True)
+        for axis in geometry.active_axes:
+            if data.shape[axis] == 1:
+                continue
+            response = _polar_axis_transfer_function(
+                data.shape, axis, geometry.widths_in_grid[axis],
+                geometry.kernels[axis], geometry.boundaries[axis],
+            )
+            if geometry.boundaries[axis] == "periodic":
+                spectrum = scipy.fft.rfft(result, axis=axis, norm="ortho")
+                result = scipy.fft.irfft(
+                    spectrum * response, n=data.shape[axis], axis=axis, norm="ortho"
+                )
+            else:
+                spectrum = scipy.fft.dct(result, axis=axis, type=2, norm="ortho")
+                result = scipy.fft.idct(
+                    spectrum * response, axis=axis, type=2, norm="ortho"
+                )
+        return result
+
     # Validation
     if data.ndim != 2:
         raise ValueError(f"Data must be 2D (az, range), got {data.ndim}D")

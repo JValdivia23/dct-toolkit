@@ -1,9 +1,11 @@
 # AGENTS.md - DCT Toolkit Agent Guidelines
 
 **Project**: dct-toolkit  
-**Version**: 0.6.0  
-**Status**: Preparing v0.6.0 release (PyPI & conda-forge)  
-**Last Updated**: 2026-09-21
+**Version**: 1.0.0
+
+**Status**: Geometry-aware N-D polar release track
+
+**Last Updated**: 2026-10-26
 
 ---
 
@@ -45,7 +47,16 @@ conda activate dct-publish
 - xarray, matplotlib, cmweather (radar colormaps)
 - open-radar-data (sample radar datasets)
 - build, twine (for PyPI publishing)
-- dct-toolkit v0.5.0 (editable install)
+- dct-toolkit editable install (verify the runtime and installed-distribution versions)
+
+After changing the package version, refresh editable installation metadata:
+
+```bash
+conda run -n dct-publish python -m pip install --no-deps -e .
+conda run -n dct-publish python -c 'from importlib.metadata import version; import dct_toolkit as dct; assert dct.__version__ == version("dct-toolkit")'
+```
+
+An editable source import alone does not update installed distribution metadata.
 
 ### PYTHONPATH
 When running tests or examples from project root:
@@ -158,8 +169,9 @@ dct_toolkit/                    # PROJECT ROOT
 ├── dct_toolkit/               # INSTALLABLE PACKAGE ⚠️ CODE GOES HERE
 │   ├── __init__.py           # Public API exports
 │   ├── core.py               # Transfer functions & 1D primitives
-│   ├── cartesian.py          # 2D Cartesian separable smoothing
-│   ├── polar.py              # 2D Polar smoothing (adaptive kernels)
+│   ├── cartesian.py          # N-D Cartesian separable smoothing
+│   ├── polar.py              # Legacy 2D and explicit geometry-aware N-D smoothing
+│   ├── _geometry.py          # Shared axis/coordinate/width validation and support
 │   ├── stats.py              # Statistical ops (Normalized Convolution)
 │   └── gap_filling.py         # Gap-filling methods (deferred for public stats-first release)
 │
@@ -189,7 +201,7 @@ dct_toolkit/                    # PROJECT ROOT
 ├── docs/                      # DOCUMENTATION
 │   ├── API_REFERENCE.md
 │   ├── MATHEMATICAL_BASIS.md
-│   └── GAP_FILLING_BASIS.md
+│   └── RELEASING.md          # Local build, artifact checks, and publication handoff
 │
 ├── README.md                  # Main documentation
 ├── CHANGELOG.md               # Version history
@@ -215,7 +227,8 @@ dct_toolkit/                    # PROJECT ROOT
 
 3. **Review Documentation**
    - Check `docs/MATHEMATICAL_BASIS.md` for theory
-   - Check `docs/GAP_FILLING_BASIS.md` for gap filling theory
+   - Gap filling outside the exported statistics API remains research-internal;
+     inspect `dct_toolkit/gap_filling.py` only when that scope is requested
    - Check `docs/API_REFERENCE.md` for existing API
 
 ### Making Changes
@@ -244,6 +257,10 @@ python -m pytest /path/to/dct_toolkit/tests/ -v
 ```
 
 **Expected Output**: all tests passing
+
+CI additionally runs the installed package outside the checkout, checks runtime
+and distribution versions agree, and exercises the N-D example. Its minimum
+dependency job uses Python 3.8, NumPy 1.20.0, and SciPy 1.8.0.
 
 **If Tests Fail**:
 - Fix the code, not the tests
@@ -302,8 +319,19 @@ Before declaring task complete:
 - [x] Tag `v0.4.0` release
 - [x] Create `research/gap-filling` branch for long-term research
 
-### 🔭 Future (v0.5.0 and beyond)
-- [ ] 3D support (volumetric data)
+### v1.0.0 Development Scope
+
+- Geometry-aware N-D polar arrays with selectable azimuth, elevation, range,
+  time, linear, and batch roles in arbitrary array order.
+- Per-axis kernels, boundaries, grid/physical width units, and filtering selection.
+- Complete propagation through normalized moments, support, prefill, and fallback.
+- Unfiltered axes remain isolated domains, including all-missing batches.
+- Keep existing 2D calls compatible; explicit physical-coordinate mode is opt-in.
+- New public APIs need independent numerical tests and an independent code/docs review.
+- Do not modify manuscripts or review trackers as part of this software task.
+
+### Future Beyond v1.0.0
+
 - [ ] Additional kernels (Savitzky-Golay, Hanning)
 - [ ] Performance optimizations (numba?)
 - [ ] Jupyter notebook examples
@@ -322,12 +350,22 @@ Before declaring task complete:
 ### Normalized Convolution
 Formula for robust mean with gaps:
 ```
-μ = smooth(data * mask) / (smooth(mask) + ε)
+μ = smooth(zero_filled_valid_data) / smooth(valid_mask)
 ```
+Apply the complete smoothing operator to each input before normalizing once.
+The denominator must be strictly greater than the floor (default `1e-3`);
+unsupported locations use the documented selective prefill fallback. This is
+not additive-epsilon regularization. `dct_count` reports nominal weighted
+support, not statistical effective sample size.
 
 ### Polar Coordinates
-- **Data Layout**: (n_azimuth, n_range)
-- **Adaptive Width**: w_az(r) = width / (r · dθ)
+- **Legacy Data Layout**: (n_azimuth, n_range), retaining index-based width units.
+- **Explicit N-D Mode**: axis roles, coordinates, and units define the geometry.
+- **Physical Angular Widths**: azimuth scales with `1 / (r * cos(elevation) * dθ)`;
+  elevation scales with `1 / (r * dφ)`. Use actual coordinates, not gate indices.
+- **Filter Order**: azimuth, elevation, range, then independent time/linear axes;
+  this is an ordered nonstationary operator, not one global separable transform.
+- **Fallback Domains**: never borrow support across unfiltered/batch axes.
 - **Boundary Conditions**:
   - Reflective: DCT-II (even symmetry)
   - Periodic: Real FFT (circular convolution)
@@ -412,14 +450,17 @@ git merge feature/hanning-window
 ```
 
 ### Repository Status
-- GitHub: Private (core team access only)
-- PyPI: **Public** — `pip install dct-toolkit` works (v0.6.0 live)
+- GitHub: **Public** — `JValdivia23/dct-toolkit`
+- PyPI: **Public** distribution channel; local version changes do not publish a release
 - conda-forge: **Approved & Merged** — Feedstock live at `conda-forge/dct-toolkit-feedstock`
 
 ### Current Version
-- `v0.6.0` — Support for anisotropic smoothing widths, per-axis Cartesian kernels,
-  mixed polar kernels, periodic polar prefill, and effective density gating.
-- Tag: `git checkout v0.6.0`
+
+- Version: `1.0.0`, adding explicit geometry-aware N-D polar processing.
+- Preserve the historical `v0.6.0` and older release records.
+- Do not tag, push, upload to PyPI/conda-forge, or create a public archival record
+  without approval.
+- See `docs/RELEASING.md` for local artifact verification and release handoff.
 
 ### Gap-Filling Status
 - Code exists in `dct_toolkit/gap_filling.py` (available for import directly)

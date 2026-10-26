@@ -2,11 +2,12 @@
 
 package:
   name: dct-toolkit
-  version: 0.6.0
+  version: 1.0.0
 
 source:
-  url: https://pypi.org/packages/source/d/dct-toolkit/dct_toolkit-0.6.0.tar.gz
-  sha256: 7b5975397b859f8af492f9b4c9fba470336225c0cf7fb3d2528d6ae4ed0ffcdd
+  # Keep this checksum aligned with the exact source archive published on PyPI.
+  url: https://pypi.org/packages/source/d/dct-toolkit/dct_toolkit-1.0.0.tar.gz
+  sha256: ee20e3bc0690d709edd9e4097fb51cdf9905e8faf53b9bab7ca5f1da4a08c817
 
 build:
   number: 0
@@ -17,7 +18,7 @@ requirements:
   host:
     - python {{ python_min }}
     - pip
-    - hatchling >=1.25.0
+    - hatchling >=1.25.0,<1.32.0
   run:
     - python >={{ python_min }}
     - numpy >=1.20

@@ -5,6 +5,72 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-10-26
+
+Geometry-aware N-D polar release, preserving the v0.6.0 legacy 2D interface.
+
+### Added
+- Explicit N-D polar geometry through keyword-only `axis_types`, `axis_coords`,
+  `boundary`, `width_units`, `angle_units`, and `filter_axes` in `smooth_polar`,
+  forwarded by the smoothing wrapper and statistics with `coordinates='polar'`.
+- Named azimuth/elevation/range axes in arbitrary array order, plus time, linear
+  (`cartesian` alias), and independent batch axes; per-axis widths, kernels,
+  boundaries, and physical/grid units follow array order.
+- Physical angular widths use actual range and elevation geometry:
+  `L_az / (R*cos(elevation)*delta_az)` and `L_el / (R*delta_el)` in grid cells.
+  Regular coordinate validation rejects singular origins/poles and incomplete
+  non-singleton physical periodic azimuth grids rather than capping widths.
+- Synthetic, plotting-free `examples/nd_polar.py` demonstrates a
+  `(time, elevation, azimuth, range)` field, missing data, mixed kernels/boundaries,
+  axis permutation, and isolation of unfiltered time slices.
+
+### Changed
+- Explicit geometry uses canonical azimuth/elevation/range/time/linear filter
+  order independently of array storage order. The generally nonseparable,
+  noncommuting operator is not an exact isotropic or cell-volume convolution.
+- Batch and unfiltered dimensions remain independent through smoothing,
+  normalized statistics, iterative filling, and every fallback. They do not
+  contribute nominal support area; wholly missing independent domains stay NaN.
+- Documented `dct_count` as nominal weighted support, distinct from literal
+  neighbor counts and squared-weight statistical ESS, including repeated samples
+  at reflective/periodic boundaries.
+
+### Documentation corrections
+- Removed the additive-epsilon description: the normal public mean ratio uses
+  the full operator once on data and mask and requires a denominator strictly
+  greater than `1e-3`. Variance estimates both moments independently, including
+  separate fallback prefills of `x` and `x**2`, then clamps negative results.
+- Qualified nonnegative-weight statistical guarantees: arbitrary fractional
+  spectral kernels need not have nonnegative spatial weights.
+- Replaced the broken mathematical-guide link to the removed gap-filling basis
+  with research-internal module documentation, without adding a public export.
+
+### Fixed
+- Validate integer coordinate spacing before floating-point conversion, including
+  large time origins and overflow-safe signed/unsigned integer differences.
+- Promote low-precision floating coordinates before spacing validation, avoiding
+  subtraction overflow and concealed irregular grids without downcasting wider types.
+- Compute nominal support lazily with exponent scaling. An unrepresentable count
+  factor no longer prevents valid smoothing or normalized-moment computations;
+  individual effective widths remain validated.
+- Remove array-layout bias from repeated time/linear-role fallback through joint
+  mixed-boundary nearest completion and symmetric averaging of exact global ties.
+  Legacy 2D axis-wise tie rules remain unchanged.
+- Preserve zero-dimensional array outputs during count, variance, and standard
+  deviation mask restoration, consistently with smoothing and mean operations.
+- Check installed runtime/distribution version alignment and run the suite against
+  the installed package in CI, including Python 3.8 with NumPy 1.20.0/SciPy 1.8.0.
+- Document editable metadata refresh and the coordinated PyPI/conda-forge release
+  process, including checksums of the exact published source archive.
+
+### Compatibility
+- Existing `smooth_polar` positional arguments, the `width_pixels` name, and
+  positional `width` in high-level functions are unchanged.
+- `axis_types=None` preserves the legacy 2D `(azimuth, range)` path, index-based
+  range convention, scalar/pair widths and kernels, and existing boundary rules.
+  Nondefault new geometry options require explicit `axis_types`; old widths are
+  not silently reinterpreted as physical distances.
+
 ## [0.6.0] - 2026-09-21
 
 ### Changed
