@@ -26,6 +26,6 @@ def normalize_kernel_types(kernel_type: KernelLike, ndim: int) -> Tuple[str, ...
     for axis, kernel in enumerate(kernels):
         if not isinstance(kernel, str):
             raise ValueError(f"kernel_type entries must be strings, got {kernel!r} at axis {axis}")
-        if kernel not in ("boxcar", "boxcar_discrete", "gaussian"):
+        if kernel not in ("boxcar", "boxcar_discrete", "gaussian", "gaussian_spectral"):
             raise ValueError(f"Unknown kernel type: {kernel!r} at axis {axis}")
     return kernels

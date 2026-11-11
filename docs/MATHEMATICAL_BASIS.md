@@ -1,7 +1,8 @@
 # Mathematical Basis
 
-This guide targets **v1.0.0**, based on v0.6.0. It
-distinguishes the retained legacy 2D polar convention from explicit N-D geometry.
+This guide targets **v1.0.0 plus unreleased changes**, including the full sampled
+Gaussian default. It distinguishes the retained legacy 2D polar convention from
+explicit N-D geometry.
 See the [API reference](API_REFERENCE.md) for signatures and validation rules.
 
 ## 1. Spectral Smoothing Operators
@@ -53,15 +54,55 @@ also repeat samples. Discrete angular window rounding occurs after the local
 geometry conversion, independently at each relevant range/elevation slice.
 The periodic discrete response is an actual boxcar, not a Gaussian substitution.
 
-For `'gaussian'`,
+For the default `'gaussian'`, sample and normalize the full Gaussian on the
+integer grid:
+
+$$
+\sigma=W/\sqrt{12},\qquad
+Z_\sigma=\sum_{j=-\infty}^{\infty}\exp[-j^2/(2\sigma^2)],\qquad
+g_\ell=\frac{\exp[-\ell^2/(2\sigma^2)]}{Z_\sigma}.
+$$
+
+The response of this nonnegative spatial kernel is
+
+$$
+H(\omega)=g_0+2\sum_{\ell=1}^{\infty}g_\ell\cos(\ell\omega),\qquad H(0)=1.
+$$
+
+There is no fixed four-sigma or other finite spatial cutoff. Numerically, the
+implementation sums spatial samples for $\sigma<1$ and uses the equivalent
+Poisson-summation identity for $\sigma\ge1$:
+
+$$
+H(\omega)=
+\frac{\sum_{m=-\infty}^{\infty}
+\exp[-\tfrac12\sigma^2(\omega+2\pi m)^2]}
+{\sum_{m=-\infty}^{\infty}\exp[-\tfrac12\sigma^2(2\pi m)^2]}.
+$$
+
+Only terms below float64 precision are omitted. The spatial evaluation uses
+offsets 0 through 9 (omitted unnormalized two-sided mass below $4\times10^{-22}$
+when $\sigma<1$). The frequency evaluation uses aliases $m=-1,0,1$; omitted
+terms are below relative float64 precision on $[0,\pi]$ when $\sigma\ge1$.
+This avoids work or storage proportional to width for broad kernels. Reflective
+and periodic transforms evaluate the same kernel at their respective frequencies;
+repeated reflection/wrapping contributions are included.
+
+For `'gaussian_spectral'`, the retained v1.0.0 response is
 
 $$
 H(k)=\exp\!\left[-\tfrac12(\omega_k\sigma)^2\right],
 \qquad \sigma=W/\sqrt{12}.
 $$
 
-The width-to-sigma convention matches the variance of a continuous boxcar of
-width $W$. It does not equate the kernels' shapes, support, or statistical ESS.
+Use this explicit name to reproduce Gaussian results from v1.0.0. Its discrete
+spatial weights can be signed, despite its positive frequency response.
+
+Both Gaussian types retain the width-to-sigma convention motivated by the
+variance of a continuous boxcar of width $W$. Sampling means the new kernel's
+actual second moment need not equal $\sigma^2$, especially below one grid cell;
+very narrow sampled Gaussians approach identity. The convention does not equate
+the kernels' shapes, support, or statistical ESS.
 More generally, a nonnegative spectrum does not prove that the discrete inverse
 transform has nonnegative spatial weights. Statistical positivity arguments
 below are conditional on the actual spatial weights.
@@ -260,6 +301,12 @@ If a row of $S$ has nonnegative spatial weights $q_{ij}$, a positive denominator
 defines normalized valid-data weights $q_{ij}m_j/d_i$. For the ratio path,
 the associated variance is nonnegative in exact arithmetic. This guarantee is
 conditional on **actual nonnegative spatial weights**, not a kernel label.
+The sampled `'gaussian'` and `'boxcar_discrete'` satisfy this condition under both
+boundaries. Products/compositions of their per-axis operators remain
+nonnegative, including geometry-dependent polar passes. Every selected axis
+must satisfy the condition: fractional analytical `'boxcar'` or
+`'gaussian_spectral'` axes can break it. The final clamp remains necessary for
+floating-point cancellation when subtracting nearly equal moments.
 Arbitrary fractional spectral kernels need not be positive; a clamp cannot
 make a signed-weight moment estimator a probability-weighted average. Separate
 fallback estimates also should not be conflated with the ratio-path weights.

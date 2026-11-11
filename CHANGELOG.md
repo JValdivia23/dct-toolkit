@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Make the default `'gaussian'` kernel the full normalized sampled Gaussian,
+  evaluated to floating-point precision without a fixed spatial truncation.
+  Cartesian, legacy polar, explicit N-D polar, both boundaries, normalized
+  moments, prefill, and fallback now share this nonnegative spatial kernel.
+  Numerical results change, particularly for widths near or below one grid cell.
+- Preserve the previous exponential response as `'gaussian_spectral'` for
+  reproducing v1.0.0 Gaussian results, including per-axis hybrid selections.
+  Its spatial weights can be signed; it is not the default for statistics.
+
+### Fixed
+- Remove substantive negative raw variances caused by Gaussian spatial ringing.
+  The final variance clamp remains for floating-point cancellation. Positivity
+  requires nonnegative kernels on every selected axis; fractional analytical
+  boxcars and `'gaussian_spectral'` do not provide that guarantee.
+- Evaluate broad sampled Gaussians with an equivalent frequency-alias sum,
+  avoiding allocations proportional to potentially enormous effective widths.
+
 ### Documentation
+- Document sampled Gaussian normalization, numerical evaluation, narrow-width
+  behavior, statistical guarantees, and migration to `'gaussian_spectral'`.
 - Clarify required N-D polar metadata, the default physical width units, and
   coordinate dependencies; add a runnable coordinate-free grid-width example.
 - Compare Cartesian and explicit polar N-D processing, including boundaries,

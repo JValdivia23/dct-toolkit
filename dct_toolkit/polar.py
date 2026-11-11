@@ -12,6 +12,7 @@ from typing import Optional, Sequence, Tuple
 import numpy as np
 import scipy.fft
 
+from ._gaussian import _sampled_gaussian_transfer
 from ._geometry import (
     AxisCoordinates,
     AxisStrings,
@@ -50,11 +51,15 @@ def compute_polar_transfer_functions(
         at 1), the azimuth width in beams is ``width_azimuth / (r * dtheta)``,
         where ``dtheta`` is in radians. Range width is in range gates.
     kernel_type : str or sequence of str, default='gaussian'
-        'boxcar', 'boxcar_discrete', or 'gaussian'. A string applies to both
-        dimensions. A pair selects ``(kernel_azimuth, kernel_range)``.
-        Gaussian ``sigma = width / sqrt(12)`` uses the effective width on
+        'boxcar', 'boxcar_discrete', 'gaussian', or 'gaussian_spectral'.
+        A string applies to both dimensions. A pair selects
+        ``(kernel_azimuth, kernel_range)``. Both Gaussian types use
+        ``sigma = width / sqrt(12)`` with the effective width on
         each axis. Discrete boxcars round that width to an integer, clamp
         it to at least 1, and increment even values to obtain an odd window.
+        ``gaussian`` is the full normalized sampled Gaussian, evaluated to
+        floating-point precision with no fixed spatial cutoff.
+        ``gaussian_spectral`` retains the v1.0.0 exponential spectral response.
     az_boundary : str, default='reflective'
         Azimuth boundary handling: ``'reflective'`` (DCT) or
         ``'periodic'`` (RFFT).
@@ -123,6 +128,9 @@ def compute_polar_transfer_functions(
                 H_az_T[i, :] = H
 
             elif kernel_azimuth == "gaussian":
+                H_az_T[i, :] = _sampled_gaussian_transfer(n_az, width, periodic=True)
+
+            elif kernel_azimuth == "gaussian_spectral":
                 omega = (2 * np.pi * k) / n_az
                 sigma = width / np.sqrt(12)
                 H_az_T[i, :] = np.exp(-0.5 * (omega * sigma) ** 2)
@@ -212,6 +220,14 @@ def _polar_axis_transfer_function(
     theta = np.pi * k / (n_axis if periodic else 2 * n_axis)
     widths = np.asarray(width, dtype=float)
     if kernel_type == "gaussian":
+        widths = widths.reshape((1,) * (len(shape) - widths.ndim) + widths.shape)
+        compact = np.squeeze(widths, axis=axis)
+        unique, inverse = np.unique(compact, return_inverse=True)
+        responses = np.stack([
+            _sampled_gaussian_transfer(n_axis, float(value), periodic) for value in unique
+        ])
+        response = np.moveaxis(responses[inverse].reshape(compact.shape + (n_freq,)), -1, axis)
+    elif kernel_type == "gaussian_spectral":
         with np.errstate(over="ignore", under="ignore"):
             response = np.exp(-0.5 * (2 * theta * (widths / np.sqrt(12))) ** 2)
     else:
@@ -266,8 +282,9 @@ def smooth_polar(
         Legacy mode supports only 'reflective'. Explicit geometry also
         supports 'periodic', unless overridden by ``boundary``.
     kernel_type : str or sequence of str, default='gaussian'
-        'boxcar', 'boxcar_discrete', or 'gaussian'. A string applies to every
-        axis. A sequence selects one kernel per array axis.
+        'boxcar', 'boxcar_discrete', 'gaussian', or 'gaussian_spectral'.
+        A string applies to every axis. A sequence selects one kernel per
+        array axis. Both Gaussian types use ``sigma = effective_width / sqrt(12)``.
     axis_types : sequence of str or None, optional
         Flat sequence of one role per axis: ``azimuth``, ``elevation``,
         ``range``, ``time``, ``linear`` (alias ``cartesian``), or ``batch``.
@@ -325,8 +342,11 @@ def smooth_polar(
     retain array order. Reversing dependent filters generally changes the
     result. Batch axes are never filtered. The operator does not normalize
     masked moments; use ``dct_mean`` for normalized convolution with gaps or
-    ``dct_smooth`` for automatic prefill. All three kernels support either
+    ``dct_smooth`` for automatic prefill. All four kernels support either
     boundary on each explicit axis. Widths are not capped at the axis length.
+    ``gaussian`` is the full normalized sampled Gaussian with nonnegative
+    spatial weights and no fixed spatial cutoff. ``gaussian_spectral`` retains
+    the v1.0.0 exponential response, whose spatial weights can be signed.
     Origin/pole checks concern selected nonsingleton physical angular filters:
     both angular conversions require positive ranges; only physical azimuth
     conversion rejects near-pole elevation where cos(elevation) <= 1e-12.

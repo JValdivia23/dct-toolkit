@@ -5,7 +5,7 @@ from typing import Callable, Tuple
 
 import numpy as np
 import pytest
-from scipy.ndimage import uniform_filter1d
+from scipy.ndimage import gaussian_filter1d, uniform_filter1d
 
 from dct_toolkit import dct_smooth
 from dct_toolkit.core import dct_convolve_1d, get_dct_transfer_function
@@ -17,7 +17,7 @@ from dct_toolkit.polar import (
 from dct_toolkit.stats import dct_count, dct_mean, dct_prefill, dct_std, dct_variance
 
 
-KERNELS = ("gaussian", "boxcar", "boxcar_discrete")
+KERNELS = ("gaussian", "gaussian_spectral", "boxcar", "boxcar_discrete")
 MIXED_PAIRS = [(az, rg) for az, rg in product(KERNELS, repeat=2) if az != rg]
 
 
@@ -40,7 +40,12 @@ def _polar_reference(
     for j in range(n_range):
         width = widths[0] / ((j + 1) * dtheta)
         column = data[:, j]
-        if kernels[0] == "boxcar_discrete":
+        if kernels[0] == "gaussian":
+            mode = "wrap" if az_boundary == "periodic" else "reflect"
+            step1[:, j] = gaussian_filter1d(
+                column, sigma=width / np.sqrt(12), mode=mode, truncate=12
+            )
+        elif kernels[0] == "boxcar_discrete":
             mode = "wrap" if az_boundary == "periodic" else "reflect"
             step1[:, j] = uniform_filter1d(column, size=_odd_window(width), mode=mode)
         elif az_boundary == "reflective":
@@ -48,7 +53,7 @@ def _polar_reference(
             step1[:, j] = dct_convolve_1d(column, transfer)
         else:
             omega = 2 * np.pi * np.fft.rfftfreq(n_az)
-            if kernels[0] == "gaussian":
+            if kernels[0] == "gaussian_spectral":
                 transfer = np.exp(-0.5 * (omega * width / np.sqrt(12)) ** 2)
             else:
                 transfer = np.ones(omega.size)
@@ -57,6 +62,10 @@ def _polar_reference(
                 )
             step1[:, j] = np.fft.irfft(np.fft.rfft(column) * transfer, n=n_az)
 
+    if kernels[1] == "gaussian":
+        return gaussian_filter1d(
+            step1, sigma=widths[1] / np.sqrt(12), axis=1, mode="reflect", truncate=12
+        )
     if kernels[1] == "boxcar_discrete":
         return uniform_filter1d(step1, size=_odd_window(widths[1]), axis=1, mode="reflect")
     transfer = get_dct_transfer_function(n_range, kernels[1], widths[1])

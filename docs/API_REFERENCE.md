@@ -1,7 +1,8 @@
 # API Reference
 
-This reference targets **v1.0.0**, including the public smoothing/statistics API
-and the backward-compatible v0.6.0 legacy 2D polar interface.
+This reference targets **v1.0.0 plus unreleased changes**, including the sampled
+Gaussian default, the public smoothing/statistics API, and the backward-compatible
+v0.6.0 legacy 2D polar interface.
 
 ## Core Primitives
 
@@ -11,8 +12,23 @@ and the backward-compatible v0.6.0 legacy 2D polar interface.
 Generate a 1D spectral transfer function `H[k]`.
 
 - `n` (int): Number of points.
-- `kernel_type` (str): `'boxcar'`, `'boxcar_discrete'`, `'gaussian'`.
+- `kernel_type` (str): `'boxcar'`, `'boxcar_discrete'`, `'gaussian'`,
+  `'gaussian_spectral'`.
 - `width` (float): Kernel width in pixel units.
+
+`'gaussian'` is the full normalized sampled Gaussian, with
+`g[l] proportional to exp(-l**2 / (2*sigma**2))` for all integer offsets and
+`sigma = width / sqrt(12)`. Its response is
+`H(omega) = g[0] + 2*sum(g[l]*cos(l*omega), l=1..infinity)`, evaluated to float64
+precision. There is no fixed spatial support or four-sigma cutoff. Reflection
+or periodic wrapping includes repeated sample visits for broad kernels.
+
+`'gaussian_spectral'` retains the v1.0.0 definition
+`exp(-0.5*(omega*sigma)**2)`. Use this name to reproduce earlier Gaussian
+results. It can have signed spatial weights. Both types retain the same nominal
+width-to-sigma convention; the sampled kernel's actual second moment need not
+equal `sigma**2`, especially at subgrid widths. See the mathematical basis for
+normalization and the equivalent frequency-alias evaluation.
 
 #### `dct_convolve_1d(data, H, axis=-1)`
 Apply 1D convolution using DCT-II (`norm='ortho'`).
@@ -60,8 +76,8 @@ Apply separable DCT smoothing to N-D Cartesian data.
   `'boxcar_discrete'` rounds width to an integer, clamps it to at least 1, and
   increments even values to obtain an odd window size.
 - `kernel_type` (`str` or sequence of `str`): `'boxcar'`, `'boxcar_discrete'`,
-  or `'gaussian'`. A string selects the same kernel for every axis. A 1-D list,
-  tuple, or NumPy array must have length `data.ndim` and selects one kernel per
+  `'gaussian'`, or `'gaussian_spectral'`. A string selects the same kernel for
+  every axis. A 1-D list, tuple, or NumPy array must have length `data.ndim` and selects one kernel per
   axis, independently of whether `width` is scalar or a sequence.
 - Invalid kernel sequence length, dimensionality, non-string entries, or unknown
   kernel names raise `ValueError`. Errors for invalid entries identify the axis.
@@ -118,7 +134,8 @@ This is the existing 2D **(azimuth, range)** path, not inferred physical geometr
   `width_azimuth / (r * dtheta)`; range width is in range gates. Actual first-gate
   distance and elevation are not modeled.
 - `kernel_type` is a supported string or a length-2 sequence in `(azimuth, range)`
-  order. Supported names are `'boxcar'`, `'boxcar_discrete'`, and `'gaussian'`.
+  order. Supported names are `'boxcar'`, `'boxcar_discrete'`, `'gaussian'`,
+  and `'gaussian_spectral'`, with the definitions above on both boundaries.
 - `az_res_deg` is a finite, positive real scalar in degrees and must stay positive
   after conversion to radians. Python/NumPy numeric scalars and zero-dimensional
   numeric arrays are accepted; boolean, complex, string, and nonscalar inputs
@@ -186,7 +203,9 @@ transfer vector. They are not an N-D geometry construction API.
   placeholders for batch/unfiltered axes.
 - `kernel_type`: one supported kernel string or a length-`ndim` sequence.
   Each selected axis uses its own kernel, independently of width/boundary choice.
-  Gaussian `sigma = effective_grid_width / sqrt(12)`. Discrete boxcars round
+  Both Gaussian types use `sigma = effective_grid_width / sqrt(12)`.
+  `'gaussian'` samples and normalizes after this local conversion;
+  `'gaussian_spectral'` uses the original exponential response. Discrete boxcars round
   effective grid width to an integer, clamp to at least 1, and increment even
   sizes to obtain an odd window, locally where geometry changes the width.
 - `width_units='physical'`: a string broadcasts, or a length-`ndim` sequence
@@ -266,7 +285,11 @@ exchange values, even during fallback.
 
 The mask response `S(m)` is a support-density diagnostic, not statistical ESS.
 Nonnegative spatial weights imply a response in `[0, 1]`; arbitrary fractional
-spectral kernels need not have nonnegative spatial weights and may overshoot.
+analytical boxcars and `'gaussian_spectral'` can have signed weights and overshoot.
+The default sampled `'gaussian'` and `'boxcar_discrete'` provide nonnegative
+spatial weights under either boundary. A hybrid retains this property only if
+every selected axis uses nonnegative weights. Floating-point roundoff can still
+produce tiny deviations.
 `dct_count` explicitly clips its density. Do not assume positivity merely from
 the kernel name or from a nonnegative spectral response.
 
@@ -371,8 +394,10 @@ including the density gate, pass to both moments.
 
 This is a weighted population-moment estimate, not a Bessel-corrected unbiased
 sample variance. Nonnegative-weight variance guarantees apply only when the
-actual spatial weights are nonnegative. Clamping does not make an arbitrary
-signed-weight spectral estimator a probability-weighted variance.
+actual spatial weights are nonnegative, as for sampled Gaussian/discrete boxcar
+combinations on all selected axes. The guarantee concerns exact arithmetic;
+subtracting moments can still incur floating-point cancellation. Clamping does
+not make an arbitrary signed-weight spectral estimator a probability-weighted variance.
 
 #### `dct_std`
 

@@ -80,8 +80,10 @@ def dct_smooth(
         and ``az_res_deg`` must be a finite, positive real scalar.
         Geometry and kernels are validated even for all-NaN inputs. The same
         operator is used for prefill and final smoothing. Default kernel is
-        'gaussian'. ``min_effective_density`` and private mean controls apply
-        to prefill only and are not passed to the low-level smoother.
+        the full normalized sampled 'gaussian', evaluated to floating-point
+        precision without a fixed spatial cutoff. Use 'gaussian_spectral' for
+        the v1.0.0 exponential response. ``min_effective_density`` and private
+        mean controls apply to prefill only and are not passed to the low-level smoother.
 
     Returns
     -------

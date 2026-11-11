@@ -102,7 +102,7 @@ order. Azimuth width adapts with range:
 azimuth spacing in radians. Range width is in range gates. Gaussian
 `sigma = effective_width / sqrt(12)` on the selected axis. Filtering applies
 azimuth first, then range; both periodic and reflective azimuth support all
-three kernel types, including `'boxcar_discrete'`.
+four kernel types, including `'boxcar_discrete'` and `'gaussian_spectral'`.
 `az_res_deg` must be a finite, positive scalar in degrees. For gapped data,
 periodic azimuth also wraps the nearest-neighbor prefill fallback across the
 sweep seam; range distances remain nonperiodic.
@@ -118,10 +118,27 @@ var = dct.dct_variance(data, width=10.0)
 std = dct.dct_std(data, width=10.0)
 ```
 
+The development version changes the default `'gaussian'` to the **full normalized
+sampled Gaussian**, evaluated to floating-point precision with no fixed spatial
+cutoff. Its spatial weights are nonnegative, so normalized means stay within the
+supported data range and population variances are nonnegative in exact arithmetic.
+This applies to Cartesian and both polar modes, including reflective/periodic
+boundaries and gap prefill. For mixed statistical kernels, use `'boxcar_discrete'`
+on boxcar axes to retain this property; fractional analytical `'boxcar'` kernels
+can have signed weights.
+
+**Migration from v1.0.0:** Gaussian results change, especially at narrow widths.
+Use `kernel_type="gaussian_spectral"` to retain the previous
+`exp(-0.5 * (omega * sigma)**2)` response. Both Gaussian types use
+`sigma = effective_grid_width / sqrt(12)`. Sampling means the new kernel's actual
+second moment need not equal `sigma**2`; very small widths approach identity.
+Variance still uses a numerical nonnegativity clamp; that clamp cannot repair
+signed-weight statistical estimates.
+
 ### 4) Mixed Kernels for a 3D Volume
 
 For a volume stored in **(z, y, x)** order, apply Gaussian smoothing vertically
-and boxcar smoothing horizontally:
+and discrete boxcar smoothing horizontally:
 
 ```python
 rng = np.random.default_rng(42)
@@ -130,7 +147,7 @@ volume = rng.standard_normal((16, 32, 32))  # (z, y, x)
 smoothed = dct.dct_smooth(
     volume,
     width=(3.0, 5.0, 5.0),
-    kernel_type=("gaussian", "boxcar", "boxcar"),
+    kernel_type=("gaussian", "boxcar_discrete", "boxcar_discrete"),
 )
 
 # The same kernels work with normalized statistics on data containing NaNs.
@@ -138,7 +155,7 @@ volume[5:7, 12:15, 12:15] = np.nan
 mean = dct.dct_mean(
     volume,
     width=(3.0, 5.0, 5.0),
-    kernel_type=("gaussian", "boxcar", "boxcar"),
+    kernel_type=("gaussian", "boxcar_discrete", "boxcar_discrete"),
 )
 ```
 

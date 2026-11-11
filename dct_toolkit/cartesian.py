@@ -35,9 +35,9 @@ def smooth_cartesian(
         and follows array axis order. For Gaussian kernels,
         ``sigma = width / sqrt(12)`` along the corresponding axis.
     kernel_type : str or sequence of str, default='gaussian'
-        Kernel type ('boxcar', 'boxcar_discrete', 'gaussian'). A string applies
-        to every axis. A sequence must have length ``data.ndim`` and selects
-        one kernel per axis in array order, independently of ``width``.
+        Kernel type ('boxcar', 'boxcar_discrete', 'gaussian', 'gaussian_spectral').
+        A string applies to every axis. A sequence must have length ``data.ndim``
+        and selects one kernel per axis in array order, independently of ``width``.
 
     Returns
     -------
@@ -55,6 +55,10 @@ def smooth_cartesian(
     Boundaries are reflective on every axis. Equal widths with different
     kernel types can still produce anisotropic smoothing. Input should be
     finite; use ``dct_mean`` or ``dct_smooth`` for data containing NaNs.
+    The default ``gaussian`` is the full normalized sampled Gaussian evaluated
+    to floating-point precision, with no fixed spatial cutoff and nonnegative
+    spatial weights. ``gaussian_spectral`` retains the v1.0.0 exponential
+    response; its spatial weights can be signed.
 
     Examples
     --------

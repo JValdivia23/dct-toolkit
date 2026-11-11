@@ -1,7 +1,7 @@
 """Independent numerical contracts for geometry-aware N-D polar smoothing.
 
-The reference deliberately uses spatial indexing for discrete boxcars and a
-NumPy cosine matrix/FFT for the other kernels, never package transfer helpers.
+The reference deliberately uses spatial indexing for sampled kernels and a
+NumPy cosine matrix/FFT for spectral kernels, never package transfer helpers.
 The statistics tests reuse this complete ordered operator, not normalized 1-D
 passes or implementation geometry objects.
 """
@@ -14,7 +14,7 @@ import pytest
 from dct_toolkit.polar import smooth_polar
 
 
-KERNELS = ("gaussian", "boxcar", "boxcar_discrete")
+KERNELS = ("gaussian", "gaussian_spectral", "boxcar", "boxcar_discrete")
 _ORDER = {"azimuth": 0, "elevation": 1, "range": 2, "time": 3, "linear": 4}
 
 
@@ -82,23 +82,32 @@ def _filter_line(values: np.ndarray, width: float, kernel: str, boundary: str) -
     n = len(values)
     if n == 1:
         return values.astype(float, copy=True)
-    if kernel == "boxcar_discrete":
-        size = max(1, int(np.round(width)))
-        size += int(size % 2 == 0)
-        offsets = np.arange(-(size // 2), size // 2 + 1)
+    if kernel in ("boxcar_discrete", "gaussian"):
+        if kernel == "gaussian":
+            sigma = width / np.sqrt(12)
+            # A long spatial reference makes the omitted Gaussian tails negligible.
+            radius = int(12 * sigma + 0.5)
+            offsets = np.arange(-radius, radius + 1)
+            weights = np.exp(-0.5 * (offsets / sigma) ** 2)
+            weights /= weights.sum()
+        else:
+            size = max(1, int(np.round(width)))
+            size += int(size % 2 == 0)
+            offsets = np.arange(-(size // 2), size // 2 + 1)
+            weights = np.full(size, 1.0 / size)
         indices = np.arange(n)[:, None] + offsets
         if boundary == "periodic":
             indices %= n
         else:
             indices %= 2 * n
             indices = np.where(indices < n, indices, 2 * n - 1 - indices)
-        return np.mean(values[indices], axis=1)
+        return values[indices] @ weights
 
     if boundary == "periodic":
         omega = 2 * np.pi * np.fft.rfftfreq(n)
     else:
         omega = np.pi * np.arange(n) / n
-    if kernel == "gaussian":
+    if kernel == "gaussian_spectral":
         response = np.exp(-(omega * width) ** 2 / 24.0)
     else:
         response = np.sinc(width * omega / (2 * np.pi)) / np.sinc(omega / (2 * np.pi))

@@ -4,7 +4,7 @@ from dct_toolkit.core import get_dct_transfer_function, dct_convolve_1d
 
 def test_transfer_function_dc_preservation():
     """All kernels should preserve DC (H[0] ≈ 1)."""
-    for kernel in ['boxcar', 'boxcar_discrete', 'gaussian']:
+    for kernel in ['boxcar', 'boxcar_discrete', 'gaussian', 'gaussian_spectral']:
         H = get_dct_transfer_function(64, kernel, width=8.0)
         assert np.isclose(H[0], 1.0), f"{kernel} failed DC preservation"
 
@@ -18,9 +18,9 @@ def test_boxcar_analytical_vs_discrete():
     # Relaxed tolerance as discrete/continuous difference is expected at higher freq
     assert np.allclose(H_analytical[:32], H_discrete[:32], atol=0.1)
 
-def test_gaussian_monotonicity():
-    """Gaussian transfer function should decrease monotonically."""
-    H = get_dct_transfer_function(64, 'gaussian', width=8.0)
+def test_spectral_gaussian_monotonicity():
+    """The retained exponential spectral response decreases monotonically."""
+    H = get_dct_transfer_function(64, 'gaussian_spectral', width=8.0)
     assert np.all(np.diff(H) <= 0), "Gaussian not monotonically decreasing"
 
 def test_convolve_1d_identity():

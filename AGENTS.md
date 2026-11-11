@@ -5,7 +5,7 @@
 
 **Status**: Geometry-aware N-D polar release track
 
-**Last Updated**: 2026-10-26
+**Last Updated**: 2026-11-11
 
 ---
 
@@ -345,7 +345,11 @@ Before declaring task complete:
 ### Transfer Functions
 - **Boxcar (Analytical)**: `H[k] = sin(W·θ)/(W·sin(θ))`, θ = πk/(2n)
 - **Boxcar (Discrete)**: Sum of cosines for discrete kernels
-- **Gaussian**: `H[k] = exp(-0.5·(ω·σ)²)`, σ = width/√12
+- **Gaussian (default)**: full normalized sampled Gaussian, σ = width/√12;
+  evaluate its cosine sum or equivalent frequency-alias sum to float64 precision.
+  No fixed spatial cutoff; nonnegative spatial weights support statistical moments.
+- **Gaussian (spectral compatibility)**: `gaussian_spectral` retains
+  `H[k] = exp(-0.5·(ω·σ)²)`, σ = width/√12; spatial weights can be signed.
 
 ### Normalized Convolution
 Formula for robust mean with gaps:

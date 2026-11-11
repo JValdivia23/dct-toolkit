@@ -788,6 +788,16 @@ def dct_variance(
     variance : np.ndarray
         Local variance (floating-point array, including a zero-dimensional
         array for scalar input).
+
+    Notes
+    -----
+    The default full sampled Gaussian has nonnegative spatial weights, as
+    does ``boxcar_discrete``. Combinations of these kernels give nonnegative
+    population variance in exact arithmetic when supported. Every selected
+    axis must have nonnegative weights; fractional analytical boxcars and
+    ``gaussian_spectral`` do not guarantee this property. The result is clamped
+    to zero to handle floating-point cancellation; clamping cannot repair a
+    signed-weight statistical estimator.
     """
     data_array = np.asarray(data)
     _normalize_width_for_coordinates(
@@ -828,7 +838,7 @@ def dct_variance(
     )
 
     # Var = E[X^2] - E[X]^2
-    # Use maximum(0) to avoid negative variance due to numerical precision
+    # Clamp cancellation errors; signed kernels can also yield substantive negative variance.
     variance = np.asarray(np.maximum(mean_sq - mean**2, 0.0))
     if restore_input_nan:
         variance[~valid_data] = np.nan

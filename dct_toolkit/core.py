@@ -9,6 +9,9 @@ This module provides the low-level building blocks for DCT-based smoothing:
 import numpy as np
 import scipy.fft
 
+from ._gaussian import _sampled_gaussian_transfer
+
+
 def get_dct_transfer_function(n: int, kernel_type: str, width: float) -> np.ndarray:
     """
     Generate the 1D DCT Transfer Function H[k].
@@ -18,11 +21,14 @@ def get_dct_transfer_function(n: int, kernel_type: str, width: float) -> np.ndar
     n : int
         Number of points.
     kernel_type : str
-        'boxcar', 'boxcar_discrete', or 'gaussian'.
+        'boxcar', 'boxcar_discrete', 'gaussian', or 'gaussian_spectral'.
+        'gaussian' uses the full nonnegative normalized sampled Gaussian,
+        evaluated to floating-point precision. 'gaussian_spectral' retains
+        the original exponential spectral response, whose spatial weights can be signed.
     width : float
         Kernel width.
         - boxcar: full width
-        - gaussian: equivalent boxcar width (sigma = width / sqrt(12))
+        - both Gaussian types: equivalent boxcar width (sigma = width / sqrt(12))
 
     Returns
     -------
@@ -72,6 +78,9 @@ def get_dct_transfer_function(n: int, kernel_type: str, width: float) -> np.ndar
         return H
         
     elif kernel_type == 'gaussian':
+        return _sampled_gaussian_transfer(n, width)
+
+    elif kernel_type == 'gaussian_spectral':
         # Gaussian: sigma = width / sqrt(12)
         sigma = width / np.sqrt(12)
         if sigma < 1e-9:
@@ -83,6 +92,7 @@ def get_dct_transfer_function(n: int, kernel_type: str, width: float) -> np.ndar
     
     else:
         raise ValueError(f"Unknown kernel type: {kernel_type}")
+
 
 def dct_convolve_1d(data: np.ndarray, H: np.ndarray, axis: int = -1) -> np.ndarray:
     """
@@ -104,7 +114,9 @@ def dct_convolve_1d(data: np.ndarray, H: np.ndarray, axis: int = -1) -> np.ndarr
     """
     # Validate shapes
     if data.shape[axis] != len(H):
-        raise ValueError(f"Transfer function length {len(H)} does not match data dimension {data.shape[axis]}")
+        raise ValueError(
+            f"Transfer function length {len(H)} does not match data dimension {data.shape[axis]}"
+        )
 
     # Broadcast H to data shape
     shape = [1] * data.ndim
