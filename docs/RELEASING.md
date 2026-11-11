@@ -1,6 +1,6 @@
 # Release procedure
 
-Use this procedure for the `1.0.0` release and subsequent updates. Changing
+Use this procedure for the `2.0.0` release and subsequent updates. Changing
 version strings does not publish a release.
 Do not tag, push, upload to PyPI/conda-forge, or create an archival record without
 explicit approval.
@@ -11,7 +11,7 @@ explicit approval.
 2. Obtain an independent implementation and documentation review; resolve its
    findings and rerun affected tests.
 3. Check the documented examples and compatibility of existing 2D calls.
-4. Verify that `pyproject.toml` and `dct_toolkit.__version__` both report `1.0.0`.
+4. Verify that `pyproject.toml` and `dct_toolkit.__version__` both report `2.0.0`.
 5. Inspect `git diff --check` and the intended source changes. A dirty development
    checkout is not an immutable source identifier for manuscript computations.
 
@@ -22,7 +22,7 @@ its source import to update distribution metadata:
 
 ```bash
 conda run -n dct-publish python -m pip install --no-deps -e .
-conda run -n dct-publish python -c 'from importlib.metadata import version; import dct_toolkit as dct; assert dct.__version__ == version("dct-toolkit") == "1.0.0"'
+conda run -n dct-publish python -c 'from importlib.metadata import version; import dct_toolkit as dct; assert dct.__version__ == version("dct-toolkit") == "2.0.0"'
 ```
 
 Run the suite with both current dependencies and the declared minimum versions:
@@ -34,8 +34,8 @@ against an installed package, from outside the source checkout.
 Use a dedicated build environment, not the general development environment:
 
 ```bash
-python -m build --outdir dist/1.0.0
-python -m twine check dist/1.0.0/*.whl dist/1.0.0/*.tar.gz
+python -m build --outdir dist/2.0.0
+python -m twine check dist/2.0.0/*.whl dist/2.0.0/*.tar.gz
 ```
 
 Install the wheel into a separate test environment and run from outside the
@@ -53,7 +53,7 @@ import dct_toolkit as dct
 module = Path(dct.__file__).resolve()
 module.relative_to(Path(sys.prefix).resolve())  # raises if outside the environment
 assert "site-packages" in module.parts, module
-assert dct.__version__ == version("dct-toolkit") == "1.0.0"
+assert dct.__version__ == version("dct-toolkit") == "2.0.0"
 print("Testing installed artifact:", module)
 
 data = np.ones((2, 8, 4))  # elevation, azimuth, range
@@ -79,8 +79,8 @@ digests after any change to a packaged file, including documentation or tests.
 ## Conda recipes
 
 The two recipes under `conda.recipe/` must use the same version and the SHA-256
-of the exact source archive intended for publication. A checksum from v0.6.0
-must never be reused for v1.0.0. The PyPI source URL is a publication destination,
+of the exact source archive intended for publication. A checksum from an earlier release
+must never be reused for v2.0.0. The PyPI source URL is a publication destination,
 not evidence that the archive already exists there. Publish that exact archive
 before submitting a recipe that downloads it.
 
@@ -88,17 +88,17 @@ before submitting a recipe that downloads it.
 
 1. Commit the reviewed software, tests, documentation, and recipe changes. Merge
    to `main` without discarding unrelated work, then push the approved source and
-   annotated `v1.0.0` tag. Preserve all historical tags.
+   annotated `v2.0.0` tag. Preserve all historical tags.
 2. Upload only the validated artifacts, using a project-scoped PyPI token stored
    securely or a configured trusted publisher:
 
    ```bash
-   python -m twine upload dist/1.0.0/dct_toolkit-1.0.0-py3-none-any.whl dist/1.0.0/dct_toolkit-1.0.0.tar.gz
+   python -m twine upload dist/2.0.0/dct_toolkit-2.0.0-py3-none-any.whl dist/2.0.0/dct_toolkit-2.0.0.tar.gz
    ```
 
    Never put tokens in source files, shell command arguments, logs, or chat.
 3. Verify the PyPI version and both published SHA-256 values against the local
-   artifacts. Test a fresh `pip install dct-toolkit==1.0.0` outside the checkout.
+   artifacts. Test a fresh `pip install dct-toolkit==2.0.0` outside the checkout.
 4. Create a pull request in `conda-forge/dct-toolkit-feedstock` updating the
    version and the SHA-256 of that exact PyPI source archive. Keep the build
    number at zero for a new upstream version; follow feedstock CI/rerender rules.
@@ -113,7 +113,7 @@ manifest, but must not substitute a different archive for the one on PyPI.
 
 ## Reproducibility handoff
 
-Before using v1.0.0 for final paper computations, record:
+Before using v2.0.0 for final paper computations, record:
 
 - the approved immutable source commit and whether the checkout is clean;
 - the exact installed artifact and its digest;
@@ -123,5 +123,5 @@ Before using v1.0.0 for final paper computations, record:
 
 Require the exact chosen release or artifact rather than a minimum-version check.
 Keep results generated with earlier versions identifiable as historical results;
-do not relabel them as v1.0.0. Updating manuscripts and review plans is a separate
+do not relabel them as v2.0.0. Updating manuscripts and review plans is a separate
 task after software validation, not part of this release preparation.

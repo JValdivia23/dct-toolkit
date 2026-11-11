@@ -6,8 +6,10 @@
 `dct_toolkit` provides DCT/FFT-based smoothing and normalized-convolution statistics
 for data with gaps. Runtime dependencies are NumPy and SciPy only.
 
-**Version: v1.0.0.** Geometry-aware N-D polar processing requires version 1.0.0
-or newer. Existing 2D polar calls retain their index-based width conventions.
+**Version: v2.0.0.** The default Gaussian now uses the full normalized sampled
+kernel. To retain pre-2.0 Gaussian results, select `'gaussian_spectral'` explicitly.
+Geometry-aware N-D polar processing requires version 1.0.0 or newer. Existing 2D
+polar calls retain their index-based width conventions.
 
 ## Scope
 
@@ -118,7 +120,7 @@ var = dct.dct_variance(data, width=10.0)
 std = dct.dct_std(data, width=10.0)
 ```
 
-The development version changes the default `'gaussian'` to the **full normalized
+Version 2.0.0 changes the default `'gaussian'` to the **full normalized
 sampled Gaussian**, evaluated to floating-point precision with no fixed spatial
 cutoff. Its spatial weights are nonnegative, so normalized means stay within the
 supported data range and population variances are nonnegative in exact arithmetic.
@@ -127,13 +129,21 @@ boundaries and gap prefill. For mixed statistical kernels, use `'boxcar_discrete
 on boxcar axes to retain this property; fractional analytical `'boxcar'` kernels
 can have signed weights.
 
-**Migration from v1.0.0:** Gaussian results change, especially at narrow widths.
+**Migration from v1.0.0 to v2.0.0:** Gaussian results change, especially at narrow widths.
 Use `kernel_type="gaussian_spectral"` to retain the previous
 `exp(-0.5 * (omega * sigma)**2)` response. Both Gaussian types use
 `sigma = effective_grid_width / sqrt(12)`. Sampling means the new kernel's actual
 second moment need not equal `sigma**2`; very small widths approach identity.
 Variance still uses a numerical nonnegativity clamp; that clamp cannot repair
 signed-weight statistical estimates.
+
+For hybrid kernels, replace each previous `'gaussian'` entry with
+`'gaussian_spectral'` to reproduce earlier results. For example,
+`('gaussian', 'boxcar_discrete')` becomes
+`('gaussian_spectral', 'boxcar_discrete')`. Set this explicitly for every
+smoothing/statistics call that must retain the old response; prefill and
+fallback inherit the selected kernels. Calls that omit `kernel_type` use the
+new sampled Gaussian.
 
 ### 4) Mixed Kernels for a 3D Volume
 

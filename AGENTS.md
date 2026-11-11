@@ -1,9 +1,9 @@
 # AGENTS.md - DCT Toolkit Agent Guidelines
 
 **Project**: dct-toolkit  
-**Version**: 1.0.0
+**Version**: 2.0.0
 
-**Status**: Geometry-aware N-D polar release track
+**Status**: Full sampled Gaussian statistics release track
 
 **Last Updated**: 2026-11-11
 
@@ -330,7 +330,7 @@ Before declaring task complete:
 - New public APIs need independent numerical tests and an independent code/docs review.
 - Do not modify manuscripts or review trackers as part of this software task.
 
-### Future Beyond v1.0.0
+### Future Beyond v2.0.0
 
 - [ ] Additional kernels (Savitzky-Golay, Hanning)
 - [ ] Performance optimizations (numba?)
@@ -460,8 +460,9 @@ git merge feature/hanning-window
 
 ### Current Version
 
-- Version: `1.0.0`, adding explicit geometry-aware N-D polar processing.
-- Preserve the historical `v0.6.0` and older release records.
+- Version: `2.0.0`, using the full sampled Gaussian by default across smoothing
+  and statistics. Use `gaussian_spectral` to reproduce pre-2.0 Gaussian results.
+- Preserve the historical `v1.0.0`, `v0.6.0`, and older release records.
 - Do not tag, push, upload to PyPI/conda-forge, or create a public archival record
   without approval.
 - See `docs/RELEASING.md` for local artifact verification and release handoff.
@@ -469,7 +470,7 @@ git merge feature/hanning-window
 ### Gap-Filling Status
 - Code exists in `dct_toolkit/gap_filling.py` (available for import directly)
 - **Not exported** in public API (`__init__.py`) — research-internal
-- Full gap-filling to be released in future v1.x after research matures
+- Full gap-filling to be released in a future version after research matures
 
 ---
 

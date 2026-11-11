@@ -1,6 +1,6 @@
 # API Reference
 
-This reference targets **v1.0.0 plus unreleased changes**, including the sampled
+This reference targets **v2.0.0**, including the sampled
 Gaussian default, the public smoothing/statistics API, and the backward-compatible
 v0.6.0 legacy 2D polar interface.
 
@@ -25,7 +25,9 @@ or periodic wrapping includes repeated sample visits for broad kernels.
 
 `'gaussian_spectral'` retains the v1.0.0 definition
 `exp(-0.5*(omega*sigma)**2)`. Use this name to reproduce earlier Gaussian
-results. It can have signed spatial weights. Both types retain the same nominal
+results. In hybrid sequences, replace each prior `'gaussian'` entry with
+`'gaussian_spectral'`. Calls omitting `kernel_type` use the new sampled Gaussian.
+The compatibility kernel can have signed spatial weights. Both types retain the same nominal
 width-to-sigma convention; the sampled kernel's actual second moment need not
 equal `sigma**2`, especially at subgrid widths. See the mathematical basis for
 normalization and the equivalent frequency-alias evaluation.

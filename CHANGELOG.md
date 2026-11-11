@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-11
+
+Major release changing the default Gaussian's numerical definition. Existing
+calls remain accepted, but Gaussian outputs change. For reproducible pre-2.0
+results, explicitly select `'gaussian_spectral'` wherever Gaussian filtering was
+previously used, including each Gaussian entry in hybrid kernel sequences.
+Widths, coordinate conventions, and the public function signatures are unchanged.
+
+### Breaking Changes
+- Redefine `'gaussian'`, the default kernel, as the full normalized sampled
+  Gaussian rather than the exponential spectral response used in v1.0.0.
+  This affects existing smoothing/statistics calls even when `kernel_type`
+  is omitted. Use `'gaussian_spectral'` to retain the previous response.
+
 ### Changed
 - Make the default `'gaussian'` kernel the full normalized sampled Gaussian,
   evaluated to floating-point precision without a fixed spatial truncation.

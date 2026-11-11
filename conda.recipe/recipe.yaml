@@ -2,7 +2,7 @@ schema_version: 1
 
 context:
   name: dct-toolkit
-  version: "1.0.0"
+  version: "2.0.0"
   python_min: "3.8"
 
 package:
@@ -12,7 +12,7 @@ package:
 source:
   # Keep this checksum aligned with the exact source archive published on PyPI.
   url: https://pypi.org/packages/source/d/dct-toolkit/dct_toolkit-${{ version }}.tar.gz
-  sha256: ee20e3bc0690d709edd9e4097fb51cdf9905e8faf53b9bab7ca5f1da4a08c817
+  sha256: 0b47acc6bc290b352f8fe0882a715df083ced96a4cae4508d7dce5ef235586c0
 
 build:
   number: 0

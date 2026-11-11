@@ -1,6 +1,6 @@
 # Mathematical Basis
 
-This guide targets **v1.0.0 plus unreleased changes**, including the full sampled
+This guide targets **v2.0.0**, including the full sampled
 Gaussian default. It distinguishes the retained legacy 2D polar convention from
 explicit N-D geometry.
 See the [API reference](API_REFERENCE.md) for signatures and validation rules.
