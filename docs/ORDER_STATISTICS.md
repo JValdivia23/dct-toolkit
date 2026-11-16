@@ -1,6 +1,6 @@
-# Local weighted order statistics (unreleased)
+# Local weighted order statistics (v2.1.0)
 
-The `order_stats` and `support` modules extend the v2.0.0 spectral operators with
+Introduced in v2.1.0, the `order_stats` and `support` modules extend the spectral operators with
 geometry-aware weighted distributions. Public names describe the statistic:
 `local_quantile`, `local_median`, `local_mad`, and `local_support`. They are also
 exported from `dct_toolkit`. Existing `dct_*` names and their defaults remain.

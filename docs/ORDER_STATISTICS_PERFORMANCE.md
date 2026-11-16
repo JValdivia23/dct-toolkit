@@ -1,4 +1,4 @@
-# Local-statistics performance (unreleased)
+# Local-statistics performance (v2.1.0)
 
 These are measurements, not a guarantee that a nonlinear quantile costs one
 linear convolution. The three evaluation methods use the same weighted

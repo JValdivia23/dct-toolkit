@@ -1,9 +1,9 @@
 # AGENTS.md - DCT Toolkit Agent Guidelines
 
 **Project**: dct-toolkit  
-**Version**: 2.0.0
+**Version**: 2.1.0
 
-**Status**: Full sampled Gaussian statistics release track
+**Status**: Spectral and weighted local-statistics release track
 
 **Last Updated**: 2026-11-16
 
@@ -330,9 +330,9 @@ Before declaring task complete:
 - New public APIs need independent numerical tests and an independent code/docs review.
 - Do not modify manuscripts or review trackers as part of this software task.
 
-### Future Beyond v2.0.0
+### Future Beyond v2.1.0
 
-Unreleased local-statistics development adds `order_stats.py`, `support.py`,
+The v2.1.0 local-statistics APIs add `order_stats.py`, `support.py`,
 and internal `_operator.py`. Reuse cached complete operators across histogram
 batches; never normalize intermediate polar passes. Quantiles use the lower
 weighted inverse CDF, MAD uses each target's own median, and center exclusion
@@ -470,9 +470,10 @@ git merge feature/hanning-window
 
 ### Current Version
 
-- Version: `2.0.0`, using the full sampled Gaussian by default across smoothing
-  and statistics. Use `gaussian_spectral` to reproduce pre-2.0 Gaussian results.
-- Preserve the historical `v1.0.0`, `v0.6.0`, and older release records.
+- Version: `2.1.0`, adding weighted local quantiles/median/MAD, actual support,
+  and strict no-filling/center-exclusion controls without changing existing defaults.
+  Use `gaussian_spectral` to reproduce pre-2.0 Gaussian results.
+- Preserve the historical `v2.0.0`, `v1.0.0`, `v0.6.0`, and older release records.
 - Do not tag, push, upload to PyPI/conda-forge, or create a public archival record
   without approval.
 - See `docs/RELEASING.md` for local artifact verification and release handoff.

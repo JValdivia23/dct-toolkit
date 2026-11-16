@@ -1,6 +1,6 @@
 # Mathematical Basis
 
-This guide targets **v2.0.0 plus unreleased local-statistics additions**, including the full sampled
+This guide targets **v2.1.0**, including the local-statistics APIs and full sampled
 Gaussian default. It distinguishes the retained legacy 2D polar convention from
 explicit N-D geometry.
 See the [API reference](API_REFERENCE.md) for signatures and validation rules.
@@ -410,7 +410,7 @@ algorithms are not exported by the top-level API, and this N-D geometry contract
 does not extend them. The formerly referenced gap-filling basis document is not
 present in this repository.
 
-## 7. Weighted Local Order Statistics (Unreleased)
+## 7. Weighted Local Order Statistics (v2.1.0)
 
 For nonnegative K and original validity M, the target-specific probability
 distribution is proportional to the weights K[i,j]*M[j]. For a value bin b,

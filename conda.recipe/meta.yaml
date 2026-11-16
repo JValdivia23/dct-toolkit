@@ -2,12 +2,12 @@
 
 package:
   name: dct-toolkit
-  version: 2.0.0
+  version: 2.1.0
 
 source:
   # Keep this checksum aligned with the exact source archive published on PyPI.
-  url: https://pypi.org/packages/source/d/dct-toolkit/dct_toolkit-2.0.0.tar.gz
-  sha256: 0b47acc6bc290b352f8fe0882a715df083ced96a4cae4508d7dce5ef235586c0
+  url: https://pypi.org/packages/source/d/dct-toolkit/dct_toolkit-2.1.0.tar.gz
+  sha256: 6ac7cac5d79cb978d015c4d1df6ca87455df998e8811e5e38a22e376a8c73c0a
 
 build:
   number: 0

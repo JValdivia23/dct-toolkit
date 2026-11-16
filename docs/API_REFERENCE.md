@@ -1,6 +1,6 @@
 # API Reference
 
-This reference targets **v2.0.0 plus unreleased local-statistics additions**, including the sampled
+This reference targets **v2.1.0**, including the local-statistics APIs and sampled
 Gaussian default, the public smoothing/statistics API, and the backward-compatible
 v0.6.0 legacy 2D polar interface.
 

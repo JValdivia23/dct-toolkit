@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-16
+
+Backward-compatible local weighted order statistics, actual support diagnostics,
+and explicit no-filling/center-exclusion controls. Existing public names, default
+behavior, Gaussian definitions, and nominal `dct_count` meaning are unchanged.
+
 ### Added
 - Descriptive local-statistics APIs: `local_quantile`, `local_median`, `local_mad`
   in `order_stats`, and `local_support`/`SupportDiagnostics` in `support`.
