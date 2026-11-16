@@ -6,8 +6,10 @@
 `dct_toolkit` provides DCT/FFT-based smoothing and normalized-convolution statistics
 for data with gaps. Runtime dependencies are NumPy and SciPy only.
 
-**Version: v2.0.0.** The default Gaussian now uses the full normalized sampled
-kernel. To retain pre-2.0 Gaussian results, select `'gaussian_spectral'` explicitly.
+**Version: v2.1.0.** Adds weighted local quantiles, median/MAD, actual support
+diagnostics, and strict no-filling controls while preserving existing defaults.
+The default Gaussian remains the full normalized sampled kernel introduced in
+v2.0.0. To retain pre-2.0 Gaussian results, select `'gaussian_spectral'` explicitly.
 Geometry-aware N-D polar processing requires version 1.0.0 or newer. Existing 2D
 polar calls retain their index-based width conventions.
 
@@ -20,6 +22,13 @@ polar calls retain their index-based width conventions.
 - Backward-compatible 2D polar smoothing with index-based adaptive azimuth widths.
 - Reflective boundaries via DCT and periodic boundaries via real FFT.
 - Robust local statistics (`dct_mean`, `dct_variance`, `dct_std`, `dct_count`) with NaN support.
+
+Version 2.1.0 also adds weighted `local_quantile`, `local_median`,
+`local_mad`, actual-weight `local_support`, and strict no-filling controls. These
+are documented in [local order statistics](docs/ORDER_STATISTICS.md)
+with [runtime and memory measurements](docs/ORDER_STATISTICS_PERFORMANCE.md).
+Descriptive statistic names distinguish these operations from transform primitives;
+the histogram implementation still reuses DCT/FFT filtering internally.
 
 ## Installation
 

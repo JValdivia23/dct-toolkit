@@ -69,3 +69,7 @@ jobs:
       - name: Run N-D polar example
         working-directory: ${{ runner.temp }}
         run: python -I "${{ github.workspace }}/examples/nd_polar.py"
+
+      - name: Run local order-statistics example
+        working-directory: ${{ runner.temp }}
+        run: python -I "${{ github.workspace }}/examples/local_order_stats.py"

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-16
+
+Backward-compatible local weighted order statistics, actual support diagnostics,
+and explicit no-filling/center-exclusion controls. Existing public names, default
+behavior, Gaussian definitions, and nominal `dct_count` meaning are unchanged.
+
+### Added
+- Descriptive local-statistics APIs: `local_quantile`, `local_median`, `local_mad`
+  in `order_stats`, and `local_support`/`SupportDiagnostics` in `support`.
+  All are exported at package level alongside the existing spectral API.
+- Lower weighted inverse-CDF quantiles and target-centered unscaled MAD, using
+  the complete ordered operator, original masks and positive spatial kernels.
+- Exact small-array references, batched spectral histograms with explicit value
+  error diagnostics, and exact spatial Cartesian discrete-boxcar evaluation.
+  Histogram ranges/categories remain isolated across unfiltered/batch axes.
+- Full-diagonal center exclusion including repeated reflection/wrap visits;
+  original/available/excluded weight masses and auditable support diagnostics.
+- Public `fallback='none'` strict normalized statistics/smoothing and explicit
+  center exclusion on existing mean/variance/std/smoothing APIs. Existing
+  defaults and nominal `dct_count` semantics are preserved.
+- Cached operator responses, fused strict moment/mask batches, streamed quantiles,
+  shared median/MAD histograms with bounded-memory temporary-file spill, and
+  reproducible timing/peak-RSS benchmarks. No fixed Gaussian cutoff is added.
+
 ## [2.0.0] - 2026-11-11
 
 Major release changing the default Gaussian's numerical definition. Existing

@@ -1,10 +1,23 @@
 # API Reference
 
-This reference targets **v2.0.0**, including the sampled
+This reference targets **v2.1.0**, including the local-statistics APIs and sampled
 Gaussian default, the public smoothing/statistics API, and the backward-compatible
 v0.6.0 legacy 2D polar interface.
 
 ## Core Primitives
+
+The new descriptive APIs are `local_quantile`, `local_median`, `local_mad`,
+`local_support`, `OrderStatisticResult`, and `SupportDiagnostics`, exported at
+package level. Their full signatures, weighted-CDF convention, exact/spatial/
+histogram methods, value-error controls, support/exclusion diagnostics and memory
+policy are specified in [local order statistics](ORDER_STATISTICS.md).
+
+Existing `dct_mean`, `dct_variance`, `dct_std`, and `dct_smooth` now accept
+keyword-only `fallback='prefill'` and `exclude_center=False`. Defaults are
+unchanged. `fallback='none'` computes only original-mask normalized ratios,
+without internal filling. Exclusion requires strict mode and nonnegative
+kernels, using the complete Kii, including boundary repeats. See the
+[strict-mode contract](ORDER_STATISTICS.md#strict-no-filling-mode-on-existing-statistics).
 
 ### `dct_toolkit.core`
 
@@ -43,7 +56,12 @@ Apply 1D convolution using DCT-II (`norm='ortho'`).
 
 ## High-Level Smoothing
 
-### `dct_toolkit.dct_smooth(data, width, coordinates='cartesian', prefill_max_iter=3, **kwargs)`
+### `dct_toolkit.dct_smooth`
+
+```python
+dct_smooth(data, width, coordinates='cartesian', prefill_max_iter=3, *,
+           fallback='prefill', exclude_center=False, **kwargs)
+```
 Top-level convenience wrapper for Cartesian and polar smoothing.
 
 - `coordinates='cartesian'`: calls `smooth_cartesian(data, width, **kwargs)`.
@@ -326,7 +344,8 @@ count(i) = clip(S(mask)(i), 0, 1) * A(i)
 
 ```python
 dct_mean(data, width, coordinates="cartesian", mask=None,
-         restore_input_nan=True, min_effective_density=None, **kwargs)
+         restore_input_nan=True, min_effective_density=None, *,
+         fallback="prefill", exclude_center=False, **kwargs)
 ```
 
 - Returns floating-point output. `mask`, when supplied, must match `data.shape`;
@@ -336,13 +355,18 @@ dct_mean(data, width, coordinates="cartesian", mask=None,
   than `1e-3`** (`_MEAN_DENOMINATOR_FLOOR`). No additive epsilon is used.
 - At unsupported/poorly conditioned positions, the existing stability fallback
   prefills the field and smooths it. Support must exist in the same independent
-  filtered domain; wholly missing domains remain NaN.
+  filtered domain; wholly missing domains remain NaN. This describes the default
+  `fallback='prefill'`; `fallback='none'` leaves unsupported ratios NaN instead.
 - `restore_input_nan=True` masks output at invalid input support. Set it to False
   to retain estimates in gaps, without permitting cross-domain borrowing.
 - `min_effective_density=None` retains the default stability behavior. A positive
   threshold, typically in `[0, 1]`, discards results where the original `S(m)` is
   below it, **after** fallback. This is a dimensionless support-density gate,
   not an ESS threshold. It does not turn the fallback into a ratio estimator.
+- `exclude_center=True` requires `fallback='none'` and nonnegative kernels. It
+  subtracts full Kii from available mass and Kii*Mi from valid mass/moments.
+  The density gate then uses external valid/available weight, with numerical
+  comparisons in mass units to avoid amplified near-identity roundoff.
 
 #### `dct_prefill`
 
@@ -384,7 +408,7 @@ dct_prefill(data, width, coordinates="cartesian", fill_mask=None,
 
 ```python
 dct_variance(data, width, coordinates="cartesian", mask=None,
-             restore_input_nan=True, **kwargs)
+             restore_input_nan=True, *, fallback="prefill", exclude_center=False, **kwargs)
 ```
 
 Compute `max(0, E[x**2] - E[x]**2)` from independent normalized first and second
@@ -405,7 +429,7 @@ not make an arbitrary signed-weight spectral estimator a probability-weighted va
 
 ```python
 dct_std(data, width, coordinates="cartesian", mask=None,
-        restore_input_nan=True, **kwargs)
+        restore_input_nan=True, *, fallback="prefill", exclude_center=False, **kwargs)
 ```
 
 Return `sqrt(dct_variance(...))`, with the same mask, geometry, fallback, and
