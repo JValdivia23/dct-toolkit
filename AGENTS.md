@@ -5,7 +5,7 @@
 
 **Status**: Full sampled Gaussian statistics release track
 
-**Last Updated**: 2026-11-11
+**Last Updated**: 2026-11-16
 
 ---
 
@@ -331,6 +331,16 @@ Before declaring task complete:
 - Do not modify manuscripts or review trackers as part of this software task.
 
 ### Future Beyond v2.0.0
+
+Unreleased local-statistics development adds `order_stats.py`, `support.py`,
+and internal `_operator.py`. Reuse cached complete operators across histogram
+batches; never normalize intermediate polar passes. Quantiles use the lower
+weighted inverse CDF, MAD uses each target's own median, and center exclusion
+removes the full Kii including repeated visits. Positive kernels only; no filling
+or fixed Gaussian cutoff. Keep exact/reference, histogram and spatial methods
+as evaluations of the same estimator. Benchmark elapsed time and fresh-process
+peak RSS; do not claim nonlinear ranks cost one convolution. See
+`docs/ORDER_STATISTICS.md` and `examples/benchmark_order_stats.py`.
 
 - [ ] Additional kernels (Savitzky-Golay, Hanning)
 - [ ] Performance optimizations (numba?)

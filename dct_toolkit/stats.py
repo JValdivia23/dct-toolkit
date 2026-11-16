@@ -13,6 +13,7 @@ import scipy.ndimage
 import scipy.spatial
 
 from ._geometry import _resolve_polar_geometry
+from ._operator import _make_plan
 from ._kernels import normalize_kernel_types
 from ._widths import WidthLike, normalize_widths
 from .cartesian import smooth_cartesian
@@ -27,6 +28,60 @@ _POLAR_GEOMETRY_OPTIONS = (
     "kernel_type", "az_res_deg", "az_boundary", "range_boundary", "axis_types",
     "axis_coords", "boundary", "width_units", "angle_units", "filter_axes",
 )
+
+
+def _validate_fallback(fallback: str, exclude_center: bool) -> None:
+    """Keep strict exclusion separate from completion-based fallback policies."""
+    if fallback not in ("prefill", "none"):
+        raise ValueError("fallback must be 'prefill' or 'none'")
+    if exclude_center and fallback != "none":
+        raise ValueError("exclude_center=True requires fallback='none'")
+
+
+def _strict_moments(
+    data: np.ndarray, valid: np.ndarray, width: WidthLike, coordinates: str,
+    exclude_center: bool, second_moment: bool, min_effective_density: Optional[float],
+    denominator_floor: float, **kwargs: Any,
+) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    """Filter original moments/mask in one cached batch, without completing data."""
+    if np.iscomplexobj(data):
+        raise ValueError("Strict normalized statistics require real data")
+    options = _smoothing_kwargs(kwargs)
+    options.pop("min_effective_density", None)
+    plan = _make_plan(data.shape, width, coordinates, **options)
+    if exclude_center:
+        plan.require_positive()
+    filled = np.where(valid, data, 0.0)
+    fields = [filled]
+    if second_moment:
+        fields.append(filled**2)
+    fields.append(valid.astype(float))
+    filtered = plan.apply(np.stack(fields))
+    denominator = filtered[-1]
+    density = denominator
+    if exclude_center:
+        self_weight = np.clip(plan.diagonal(), 0.0, 1.0)
+        for index, field in enumerate(fields):
+            filtered[index] -= self_weight * field
+        denominator = filtered[-1]
+        density = np.full(data.shape, np.nan)
+        available = 1.0 - self_weight
+        np.divide(denominator, available, out=density,
+                  where=available > 64 * np.finfo(float).eps)
+    supported = np.isfinite(denominator) & (denominator > denominator_floor)
+    if min_effective_density is not None and float(min_effective_density) > 0:
+        if exclude_center:
+            supported &= ((available > 64 * np.finfo(float).eps) &
+                          (denominator >= float(min_effective_density) * available -
+                           64 * np.finfo(float).eps))
+        else:
+            supported &= np.isfinite(density) & (density >= float(min_effective_density))
+    outputs = []
+    for field in filtered[:-1]:
+        result = np.full(data.shape, np.nan)
+        np.divide(field, denominator, out=result, where=supported)
+        outputs.append(result)
+    return outputs[0], outputs[1] if second_moment else None
 
 
 def _normalize_width_for_coordinates(
@@ -437,6 +492,9 @@ def dct_mean(
     mask: Optional[np.ndarray] = None,
     restore_input_nan: bool = True,
     min_effective_density: Optional[float] = None,
+    *,
+    fallback: str = "prefill",
+    exclude_center: bool = False,
     **kwargs: Any,
 ) -> np.ndarray:
     """
@@ -467,6 +525,15 @@ def dct_mean(
         ``dct_count / nominal_support``, this gate does not clip the response.
         ``None`` (default) or a non-positive value disables this additional gate,
         retaining the internal ``_MEAN_DENOMINATOR_FLOOR`` stability rule.
+    fallback : {'prefill', 'none'}, default='prefill'
+        Preserve the existing selective completion fallback, or evaluate only
+        K(M*x)/K(M) from original observations. 'none' never prefills or borrows
+        nearest values; unsupported results remain NaN.
+    exclude_center : bool, default=False
+        Requires fallback='none' and nonnegative sampled Gaussian/discrete boxcar
+        kernels. Remove every contribution of the tested physical input using
+        the full operator diagonal. The density gate then uses valid/available
+        external weight. Identity-only support becomes unsupported.
     **kwargs
         Additional arguments passed to smoothing, including ``kernel_type``
         and the polar ``axis_types``, ``axis_coords``, ``boundary``,
@@ -491,6 +558,7 @@ def dct_mean(
     In explicit N-D polar mode, all inactive axes define isolated domains.
     A domain with no finite valid support remains NaN, including during fallback.
     """
+    _validate_fallback(fallback, exclude_center)
     stable_fallback = bool(kwargs.pop("_stable_fallback", True))
     prefill_max_iter = kwargs.pop("_prefill_max_iter", 3)
     den_floor = kwargs.pop("_denominator_floor", None)
@@ -511,6 +579,15 @@ def dct_mean(
         )
 
     valid_data = mask & np.isfinite(data_array)
+
+    if fallback == "none":
+        mean, _ = _strict_moments(
+            data_array.astype(out_dtype, copy=False), valid_data, width, coordinates,
+            exclude_center, False, min_effective_density, float(den_floor), **kwargs,
+        )
+        if restore_input_nan:
+            mean[~valid_data] = np.nan
+        return mean
 
     # 1. Numerator: Smooth(Data * Mask)
     # Fill NaNs with 0 for the convolution (they are masked out anyway)
@@ -751,6 +828,9 @@ def dct_variance(
     coordinates: str = "cartesian",
     mask: Optional[np.ndarray] = None,
     restore_input_nan: bool = True,
+    *,
+    fallback: str = "prefill",
+    exclude_center: bool = False,
     **kwargs: Any,
 ) -> np.ndarray:
     """
@@ -775,6 +855,11 @@ def dct_variance(
         inferred from finite input values.
     restore_input_nan : bool, default=True
         If True, output is set to NaN where input support is invalid.
+    fallback : {'prefill', 'none'}, default='prefill'
+        Same completion policy as dct_mean. Strict first/second moments and mask
+        share one cached batched operator application, without filling data.
+    exclude_center : bool, default=False
+        Same full-diagonal exclusion as dct_mean; requires fallback='none'.
     **kwargs
         Additional arguments passed to ``dct_mean`` for both moments.
         ``kernel_type`` accepts a string or one kernel per array axis.
@@ -800,6 +885,7 @@ def dct_variance(
     signed-weight statistical estimator.
     """
     data_array = np.asarray(data)
+    _validate_fallback(fallback, exclude_center)
     _normalize_width_for_coordinates(
         width, coordinates, data_array.ndim, kwargs.get("axis_types")
     )
@@ -815,6 +901,19 @@ def dct_variance(
             f"Mask shape {mask.shape} does not match data shape {data_float.shape}"
         )
     valid_data = mask & np.isfinite(data_float)
+
+    if fallback == "none":
+        moment_options = dict(kwargs)
+        density_gate = moment_options.pop("min_effective_density", None)
+        mean, mean_sq = _strict_moments(
+            data_float, valid_data, width, coordinates, exclude_center, True,
+            density_gate,
+            float(kwargs.get("_denominator_floor", _MEAN_DENOMINATOR_FLOOR)), **moment_options,
+        )
+        variance = np.asarray(np.maximum(mean_sq - mean**2, 0.0))
+        if restore_input_nan:
+            variance[~valid_data] = np.nan
+        return variance
 
     # E[X]
     mean = dct_mean(
@@ -852,6 +951,9 @@ def dct_std(
     coordinates: str = "cartesian",
     mask: Optional[np.ndarray] = None,
     restore_input_nan: bool = True,
+    *,
+    fallback: str = "prefill",
+    exclude_center: bool = False,
     **kwargs: Any,
 ) -> np.ndarray:
     """
@@ -873,6 +975,10 @@ def dct_std(
         inferred from finite input values.
     restore_input_nan : bool, default=True
         If True, output is set to NaN where input support is invalid.
+    fallback : {'prefill', 'none'}, default='prefill'
+        Same completion policy as dct_variance.
+    exclude_center : bool, default=False
+        Same full-diagonal exclusion as dct_variance; requires fallback='none'.
     **kwargs
         Additional arguments passed to ``dct_variance``, including all polar
         geometry, units, boundary, and filtering-axis options. ``kernel_type``
@@ -896,6 +1002,8 @@ def dct_std(
         coordinates,
         mask,
         restore_input_nan=restore_input_nan,
+        fallback=fallback,
+        exclude_center=exclude_center,
         **kwargs,
     )
     return np.asarray(np.sqrt(var))

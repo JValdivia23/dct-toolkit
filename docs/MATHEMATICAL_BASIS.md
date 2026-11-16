@@ -1,11 +1,16 @@
 # Mathematical Basis
 
-This guide targets **v2.0.0**, including the full sampled
+This guide targets **v2.0.0 plus unreleased local-statistics additions**, including the full sampled
 Gaussian default. It distinguishes the retained legacy 2D polar convention from
 explicit N-D geometry.
 See the [API reference](API_REFERENCE.md) for signatures and validation rules.
 
 ## 1. Spectral Smoothing Operators
+
+For the new weighted inverse-CDF, target-centered MAD, support/exclusion, and
+strict original-mask ratio contracts, see [local order statistics](ORDER_STATISTICS.md).
+Those descriptive APIs reuse the complete operator below; they do not take
+medians of coefficients or normalize separate polar passes independently.
 
 ### 1.1 Reflective and periodic axes
 
@@ -404,3 +409,49 @@ function docstrings describe the research-internal implementation. Those
 algorithms are not exported by the top-level API, and this N-D geometry contract
 does not extend them. The formerly referenced gap-filling basis document is not
 present in this repository.
+
+## 7. Weighted Local Order Statistics (Unreleased)
+
+For nonnegative K and original validity M, the target-specific probability
+distribution is proportional to the weights K[i,j]*M[j]. For a value bin b,
+
+$$
+H_{i,b}=K(M\,\mathbf{1}_{x\in b})_i,\qquad S_i=K(M)_i.
+$$
+
+The histogram applies the complete operator before normalization. It is not
+the distribution obtained by composing one-dimensional medians. Defining
+kappa[i]=K[i,i], excluding the tested physical observation gives
+
+$$
+\widetilde H_{i,b}=H_{i,b}-\kappa_i M_i\mathbf{1}_{x_i\in b},\qquad
+\widetilde S_i=S_i-\kappa_iM_i,\qquad A_i=K(1)_i-\kappa_i=1-\kappa_i.
+$$
+
+All repeated reflection/wrap visits contribute to kappa. Each ordered axis pass
+filters one axis only once; the diagonal of the full operator is the product of
+the per-axis diagonals at the target. A periodic pass obtains its diagonal from
+the zero-lag inverse response. For reflective DCT-II boundaries, using the
+length-2N even-extension kernel g, its diagonal is g[0]+g[2i+1]. The zero-lag term
+alone would miss reflected self-visits. Exact reference rows are evaluated with
+the adjoint: reverse the ordered self-adjoint axis passes rather than assuming
+the complete nonstationary polar operator is symmetric.
+
+The quantile convention is the lower weighted inverse CDF. MAD uses each
+target's own median m[i]: the weighted median of abs(x[j]-m[i]) under that same
+distribution. Normal-reference scaling is optional and explicit. There is no
+prefill or hidden uncertainty floor.
+
+Uniform value bins perturb each represented observation by at most half a bin
+width. Weighted inverse quantiles are nonexpansive under a uniformly bounded
+perturbation of the observations, so quantile value error is at most half a bin.
+The target median can also move by half a bin, giving at most one full bin of
+MAD value error. Exact distinct-value categories have zero value quantization.
+These statements exclude declared CDF floating-point ambiguity near probability
+jumps; they are not statistical confidence bounds.
+
+Strict normalized moments on existing APIs use the same original/excluded
+weights. A valid denominator must strictly exceed its floor; scientific support
+thresholds and numerical roundoff tolerance remain separate. Unsupported
+distributions/ratios remain NaN and never acquire support through fallback. See
+[the public contract](ORDER_STATISTICS.md) and [benchmarks](ORDER_STATISTICS_PERFORMANCE.md).

@@ -12,6 +12,8 @@ from .core import dct_convolve_1d, get_dct_transfer_function
 from ._widths import WidthLike
 from .cartesian import smooth_cartesian
 from .polar import smooth_polar
+from .order_stats import OrderStatisticResult, local_mad, local_median, local_quantile
+from .support import SupportDiagnostics, local_support
 from .stats import (
     _resolve_smoothing_geometry,
     _smooth_completed_field,
@@ -38,6 +40,12 @@ __all__ = [
     "dct_prefill",
     "dct_variance",
     "dct_std",
+    "local_quantile",
+    "local_median",
+    "local_mad",
+    "local_support",
+    "OrderStatisticResult",
+    "SupportDiagnostics",
 ]
 
 
@@ -46,6 +54,9 @@ def dct_smooth(
     width: WidthLike,
     coordinates: str = "cartesian",
     prefill_max_iter: Optional[int] = 3,
+    *,
+    fallback: str = "prefill",
+    exclude_center: bool = False,
     **kwargs: Any,
 ) -> np.ndarray:
     """
@@ -67,6 +78,13 @@ def dct_smooth(
         Number of normalized-convolution prefill iterations used when input
         contains NaNs. If None, prefill iterates until convergence or a
         safety cap of 20 iterations.
+    fallback : {'prefill', 'none'}, default='prefill'
+        Preserve prefill-and-smooth behavior, or use strict normalized smoothing
+        K(M*x)/K(M) with original observations and no internal filling. Strict
+        unsupported values remain NaN and the input mask is restored.
+    exclude_center : bool, default=False
+        Remove the tested observation through the full operator diagonal.
+        Requires fallback='none'; see dct_mean for the support contract.
     **kwargs
         Additional arguments (kernel_type, az_res_deg, etc.). For Cartesian
         data, ``kernel_type`` accepts a string or a sequence of supported
@@ -91,6 +109,13 @@ def dct_smooth(
         Smoothed data with the input shape, including a zero-dimensional array
         for scalar input.
     """
+    if fallback not in ("prefill", "none"):
+        raise ValueError("fallback must be 'prefill' or 'none'")
+    if exclude_center and fallback != "none":
+        raise ValueError("exclude_center=True requires fallback='none'")
+    if fallback == "none":
+        return dct_mean(data, width, coordinates, fallback="none",
+                        exclude_center=exclude_center, **kwargs)
     data_array = np.asarray(data)
     nan_mask = np.isnan(data_array)
 

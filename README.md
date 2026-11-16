@@ -21,6 +21,13 @@ polar calls retain their index-based width conventions.
 - Reflective boundaries via DCT and periodic boundaries via real FFT.
 - Robust local statistics (`dct_mean`, `dct_variance`, `dct_std`, `dct_count`) with NaN support.
 
+The development checkout also adds weighted `local_quantile`, `local_median`,
+`local_mad`, actual-weight `local_support`, and strict no-filling controls. These
+are **unreleased additions**, documented in [local order statistics](docs/ORDER_STATISTICS.md)
+with [runtime and memory measurements](docs/ORDER_STATISTICS_PERFORMANCE.md).
+Descriptive statistic names distinguish these operations from transform primitives;
+the histogram implementation still reuses DCT/FFT filtering internally.
+
 ## Installation
 
 ### pip
